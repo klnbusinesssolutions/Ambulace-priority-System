@@ -45,13 +45,12 @@ export function subscribeHospitalData(hospitalId, callback) {
     callback({ ...state });
   }
 
-  const driversUnsub = onSnapshot(
+const driversUnsub = onSnapshot(
     query(
-      collection(db, 'pending_drivers'),
-      where('hospitalId', '==', hospitalId),
-      orderBy('submittedAt', 'desc')
+      collection(db, 'drivers'),
+      where('hospitalId', '==', hospitalId)
     ),
-    (snap) => emit('drivers', mapSnapshot(snap)),
+    (snap) => emit('drivers', snap.docs.map(mapDriverDoc)),
     (error) => console.error('Drivers listener error:', error.message)
   );
   
