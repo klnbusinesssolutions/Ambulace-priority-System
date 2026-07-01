@@ -51,6 +51,26 @@ function mapDriverDoc(item) {
   };
 }
 
+function mapDriverDoc(item) {
+  const data = item.data();
+  return {
+    id: item.id,
+    fullName: data.Name || data.fullName || '',
+    email: data['Email ID'] || data.email || '',
+    phone: data['Phone Number'] || data.phone || '',
+    hospitalName: data['Hospital Name'] || data.hospitalName || '',
+    hospitalId: data.hospitalId || '',
+    gender: data.Gender || '',
+    city: data.City || data.city || '',
+    state: data.State || data.state || '',
+    availability: data.Availability || data.availability || 'offline',
+    documentsStatus: data.Documents || '',
+    location: data.location || null,
+    tripStatus: data.tripStatus || 'idle',
+    status: 'approved',
+  };
+}
+
 export function subscribeHospitalData(hospitalId, callback) {
   const state = {
     drivers: [],
