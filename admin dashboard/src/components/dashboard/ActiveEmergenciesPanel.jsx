@@ -23,13 +23,13 @@ export default function ActiveEmergenciesPanel({ emergencies }) {
               <div>
                 <div className="flex flex-wrap items-center gap-2">
                   <p className="font-medium text-slate-950">{item.id}</p>
-                  <StatusBadge status={item.severity} />
+                  <StatusBadge status={item.priority === "critical" ? "Critical" : item.priority === "high" ? "High" : item.priority === "medium" ? "Medium" : "Info"} />
                 </div>
-                <p className="mt-1 text-sm text-slate-500">{item.region} to {item.hospital}</p>
+                <p className="mt-1 text-sm text-slate-500">{item.incidentType} · {item.patientName} → {item.hospitalId}</p>
               </div>
-              <StatusBadge status={item.status} />
+              <StatusBadge status={item.status === "dispatched" ? "Dispatched" : item.status === "arrived" ? "En Route" : item.status === "active" ? "Warning" : "Approved"} />
               <div className="text-left md:text-right">
-                <p className="text-sm font-semibold text-slate-950">{item.eta}</p>
+                <p className="text-sm font-semibold text-slate-950">{item.eta || "—"}</p>
                 <p className="text-xs text-slate-500">ETA</p>
               </div>
             </div>

@@ -15,10 +15,10 @@ export default function ActivityFeed({ logs }) {
             <div className="mt-1 h-2 w-2 rounded-full bg-slate-400" />
             <div className="min-w-0 flex-1">
               <div className="flex flex-wrap items-center gap-2">
-                <p className="truncate text-sm font-medium text-slate-950">{log.event}</p>
-                <StatusBadge status={log.status} />
+                <p className="truncate text-sm font-medium text-slate-950">{log.details || log.action?.replaceAll("_", " ")}</p>
+                <StatusBadge status={log.action?.includes("rejected") ? "Rejected" : log.action?.includes("resubmission") ? "Resubmission Required" : "Approved"} />
               </div>
-              <p className="mt-1 text-xs text-slate-500">{log.actor} · {formatDateTime(log.timestamp)}</p>
+              <p className="mt-1 text-xs text-slate-500">{log.performedBy} · {formatDateTime(log.createdAt)}</p>
             </div>
           </div>
         ))}

@@ -15,25 +15,18 @@ export default function HospitalsTable({ rows, onEdit, onDelete }) {
           render: (row) => (
             <div>
               <p className="font-medium text-slate-950">{row.name}</p>
-              <p className="text-xs text-slate-500">{row.id}</p>
+              <p className="text-xs text-slate-500">{row.hospitalId}</p>
             </div>
           ),
         },
-        { key: "region", header: "Region" },
-        { key: "type", header: "Type" },
+        { key: "city", header: "City", render: (row) => `${row.city || "—"}, ${row.state || "—"}` },
+        { key: "phone", header: "Phone" },
+        { key: "email", header: "Email" },
         {
-          key: "capacity",
-          header: "Capacity",
-          render: (row) => (
-            <div className="w-28">
-              <div className="h-1.5 rounded-full bg-slate-100">
-                <div className="h-1.5 rounded-full bg-slate-900" style={{ width: `${row.capacity}%` }} />
-              </div>
-              <p className="mt-1 text-xs text-slate-500">{row.capacity}% intake load</p>
-            </div>
-          ),
+          key: "isActive",
+          header: "Status",
+          render: (row) => <StatusBadge status={row.isActive ? "Operational" : "Offline"} />,
         },
-        { key: "status", header: "Status", render: (row) => <StatusBadge status={row.status} /> },
         {
           key: "actions",
           header: "",

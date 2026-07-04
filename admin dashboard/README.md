@@ -1,4 +1,4 @@
-# ResQOps Super Admin Dashboard
+# AmbuGrid Super Admin Dashboard
 
 Production-ready React frontend for a real-time Emergency Ambulance Coordination SaaS Platform.
 

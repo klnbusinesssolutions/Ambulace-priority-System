@@ -6,6 +6,7 @@ import Dashboard from "../pages/Dashboard/Dashboard.jsx";
 import Drivers from "../pages/Drivers/Drivers.jsx";
 import Emergencies from "../pages/Emergencies/Emergencies.jsx";
 import Hospitals from "../pages/Hospitals/Hospitals.jsx";
+import LiveTracking from "../pages/LiveTracking/LiveTracking.jsx";
 import Settings from "../pages/Settings/Settings.jsx";
 import PendingAmbulances from "../pages/Verification/PendingAmbulances.jsx";
 import PendingDrivers from "../pages/Verification/PendingDrivers.jsx";
@@ -38,6 +39,7 @@ export const router = createBrowserRouter([
           { path: "hospitals", element: <Hospitals /> },
           { path: "drivers", element: <Drivers /> },
           { path: "ambulances", element: <Ambulances /> },
+          { path: "live-tracking", element: <LiveTracking /> },
           { path: "emergencies", element: <Emergencies /> },
           { path: "activity-logs", element: <ActivityLogs /> },
           { path: "settings", element: <Settings /> },

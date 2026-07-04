@@ -3,11 +3,12 @@ import ActivityFeed from "../../components/dashboard/ActivityFeed.jsx";
 import AmbulanceMonitoring from "../../components/dashboard/AmbulanceMonitoring.jsx";
 import OperationalStatus from "../../components/dashboard/OperationalStatus.jsx";
 import OverviewCards from "../../components/dashboard/OverviewCards.jsx";
+import VerificationCharts from "../../components/dashboard/VerificationCharts.jsx";
 import PageHeader from "../../components/ui/PageHeader.jsx";
 import { useOps } from "../../context/OpsContext.jsx";
 
 export default function Dashboard() {
-  const { overviewStats, operationalStats, emergencies, activityLogs, systemPanels, ambulances } = useOps();
+  const { overviewStats, operationalStats, emergencies, activityLogs, systemPanels, ambulances, verificationTrend, approvalBreakdown } = useOps();
 
   return (
     <div className="space-y-6">
@@ -17,6 +18,7 @@ export default function Dashboard() {
       />
       <OverviewCards stats={overviewStats} />
       <OverviewCards stats={operationalStats} />
+      <VerificationCharts trend={verificationTrend} breakdown={approvalBreakdown} />
       <div className="grid gap-6 xl:grid-cols-[minmax(0,1.45fr)_minmax(360px,0.75fr)]">
         <div className="space-y-6">
           <ActiveEmergenciesPanel emergencies={emergencies} />
