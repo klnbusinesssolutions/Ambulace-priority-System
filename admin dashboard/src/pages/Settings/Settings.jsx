@@ -5,19 +5,36 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../..
 import Input from "../../components/ui/Input.jsx";
 import PageHeader from "../../components/ui/PageHeader.jsx";
 import Select from "../../components/ui/Select.jsx";
+import { useAuth } from "../../context/AuthContext.jsx";
 import { useOps } from "../../context/OpsContext.jsx";
+import { hasFirebaseConfig } from "../../firebase/client.js";
+import { updateAdmin } from "../../services/firestore/adminsService.js";
 
 export default function Settings() {
   const { settings, setSettings } = useOps();
+  const { admin } = useAuth();
   const [draft, setDraft] = useState(settings);
+  const [saving, setSaving] = useState(false);
   const update = (field, value) => setDraft((current) => ({ ...current, [field]: value }));
+
+  async function handleSave() {
+    setSaving(true);
+    try {
+      setSettings(draft);
+      if (hasFirebaseConfig() && admin?.uid) {
+        await updateAdmin(admin.uid, { displayName: draft.adminName, email: draft.email });
+      }
+    } finally {
+      setSaving(false);
+    }
+  }
 
   return (
     <div className="space-y-5">
       <PageHeader
         title="Settings"
         description="Admin profile, alerting preferences, and platform behavior for the super admin console."
-        actions={<Button onClick={() => setSettings(draft)}><Save className="h-4 w-4" />Save settings</Button>}
+        actions={<Button onClick={handleSave} disabled={saving}><Save className="h-4 w-4" />{saving ? "Saving..." : "Save settings"}</Button>}
       />
       <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_360px]">
         <Card>

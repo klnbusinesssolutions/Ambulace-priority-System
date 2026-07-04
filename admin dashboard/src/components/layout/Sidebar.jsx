@@ -8,6 +8,7 @@ import {
   ClipboardList,
   LayoutDashboard,
   Menu,
+  Radar,
   Settings,
   UsersRound,
   X,
@@ -30,6 +31,7 @@ const navItems = [
   { label: "Hospitals", to: "/admin/hospitals", icon: Building2 },
   { label: "Drivers", to: "/admin/drivers", icon: UsersRound },
   { label: "Ambulances", to: "/admin/ambulances", icon: Ambulance },
+  { label: "Live Tracking", to: "/admin/live-tracking", icon: Radar },
   { label: "Active Emergencies", to: "/admin/emergencies", icon: Activity },
   { label: "Activity Logs", to: "/admin/activity-logs", icon: ClipboardList },
   { label: "Settings", to: "/admin/settings", icon: Settings },
@@ -46,11 +48,11 @@ export default function Sidebar({ collapsed, mobileOpen, onCloseMobile, onToggle
       <div className="flex h-16 items-center justify-between border-b border-slate-100 px-4">
         <div className="flex min-w-0 items-center gap-3">
           <div className="grid h-9 w-9 shrink-0 place-items-center rounded-md bg-slate-950 text-sm font-semibold text-white">
-            RX
+            AG
           </div>
           {!collapsed && (
             <div className="min-w-0">
-              <p className="truncate text-sm font-semibold text-slate-950">ResQOps</p>
+              <p className="truncate text-sm font-semibold text-slate-950">AmbuGrid</p>
               <p className="truncate text-xs text-slate-500">Super Admin Panel</p>
             </div>
           )}

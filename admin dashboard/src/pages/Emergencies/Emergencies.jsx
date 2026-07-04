@@ -7,23 +7,31 @@ import { useOps } from "../../context/OpsContext.jsx";
 import { matchesSearch } from "../../utils/formatters.js";
 
 export default function Emergencies() {
-  const { emergencies } = useOps();
+  const { emergencies, emergenciesActions } = useOps();
   const [query, setQuery] = useState("");
-  const [severity, setSeverity] = useState("All severity");
+  const [priority, setPriority] = useState("All priority");
+  const [status, setStatus] = useState("All statuses");
 
   const rows = useMemo(
-    () => emergencies.filter((item) => (severity === "All severity" || item.severity === severity) && matchesSearch(item, query, ["id", "patientRef", "region", "ambulance", "hospital", "status"])),
-    [emergencies, query, severity],
+    () =>
+      emergencies.filter(
+        (item) =>
+          (priority === "All priority" || item.priority === priority) &&
+          (status === "All statuses" || item.status === status) &&
+          matchesSearch(item, query, ["id", "patientName", "incidentType", "hospitalId", "ambulanceId", "driverName"]),
+      ),
+    [emergencies, query, priority, status],
   );
 
   return (
     <div className="space-y-5">
-      <PageHeader title="Active Emergencies" description="Realtime-ready operational view for active dispatches, severity, ETA, and handoff state." />
+      <PageHeader title="Emergencies" description="Live incidents from the emergencies collection — priority, ETA, and dispatch status." />
       <div className="flex flex-col gap-3 rounded-lg border border-slate-200 bg-white p-4 sm:flex-row">
         <Input placeholder="Search emergencies..." value={query} onChange={(event) => setQuery(event.target.value)} />
-        <Select className="sm:w-48" value={severity} onChange={(event) => setSeverity(event.target.value)} options={["All severity", "Critical", "High", "Medium", "Low"]} />
+        <Select className="sm:w-44" value={priority} onChange={(event) => setPriority(event.target.value)} options={["All priority", "critical", "high", "medium", "low"]} />
+        <Select className="sm:w-48" value={status} onChange={(event) => setStatus(event.target.value)} options={["All statuses", "active", "dispatched", "arrived", "completed", "resolved"]} />
       </div>
-      <EmergencyCards rows={rows} />
+      <EmergencyCards rows={rows} onStatusChange={(id, next) => emergenciesActions.updateStatus(id, next)} />
     </div>
   );
 }

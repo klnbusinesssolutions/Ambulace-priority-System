@@ -13,7 +13,7 @@ export default function VerificationActionButtons({
       <Button
         className="bg-emerald-600 hover:bg-emerald-700"
         onClick={() => onVerify(record)}
-        disabled={record?.verificationStatus === "approved"}
+        disabled={record?.status === "approved"}
       >
         <ShieldCheck className="h-4 w-4" />
         Verify
@@ -21,7 +21,7 @@ export default function VerificationActionButtons({
       <Button
         variant="danger"
         onClick={() => onReject(record)}
-        disabled={record?.verificationStatus === "rejected"}
+        disabled={record?.status === "rejected"}
       >
         <XCircle className="h-4 w-4" />
         Reject
@@ -29,7 +29,7 @@ export default function VerificationActionButtons({
       <Button
         className="bg-orange-600 text-white hover:bg-orange-700"
         onClick={() => onRequestResubmission(record)}
-        disabled={record?.verificationStatus === "resubmission_required"}
+        disabled={record?.status === "resubmission_required"}
       >
         <AlertCircle className="h-4 w-4" />
         Request Resubmission

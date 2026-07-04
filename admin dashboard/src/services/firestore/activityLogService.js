@@ -1,54 +1,32 @@
-import {
-  addDoc,
-  collection,
-  getFirestore,
-  onSnapshot,
-  orderBy,
-  query
-} from "firebase/firestore";
+import { COLLECTIONS } from "../../firebase/collections.js";
+import { createCollectionService, orderBy, serverTimestamp, where } from "./firestoreCollection.js";
 
-import { getFirebaseApp } from "../../firebase/client";
+const activityLogs = createCollectionService(COLLECTIONS.activityLogs);
 
-export async function createActivityLog(logData) {
-  try {
-    console.log("Creating activity log:", logData);
-
-    const app = await getFirebaseApp();
-    const db = getFirestore(app);
-
-    const docRef = await addDoc(
-      collection(db, "activity_logs"),
-      {
-        ...logData,
-        createdAt: new Date(),
-      }
-    );
-
-    console.log("Activity log created:", docRef.id);
-
-  } catch (error) {
-    console.error("Activity log error:", error);
-  }
+export async function listenToActivityLogs(callback, onError) {
+  return activityLogs.listen(callback, { constraints: [orderBy("createdAt", "desc")], onError });
 }
 
-
-export async function listenToActivityLogs(callback) {
-  const app = await getFirebaseApp();
-
-  const db = getFirestore(app);
-
-  const q = query(
-    collection(db, "activity_logs"),
-    orderBy("createdAt", "desc")
-  );
-
-  return onSnapshot(q, (snapshot) => {
-
-    const logs = snapshot.docs.map((doc) => ({
-      id: doc.id,
-      ...doc.data(),
-    }));
-
-    callback(logs);
+export async function listenToActivityLogsByHospital(hospitalId, callback, onError) {
+  return activityLogs.listen(callback, {
+    constraints: [where("hospitalId", "==", hospitalId), orderBy("createdAt", "desc")],
+    onError,
   });
+}
+
+export async function createActivityLog({ hospitalId, action, performedBy, targetId, details }) {
+  try {
+    return await activityLogs.add({
+      hospitalId,
+      action,
+      performedBy,
+      targetId,
+      details,
+      createdAt: serverTimestamp(),
+    });
+  } catch (error) {
+    // Activity logging should never block the primary action it's recording.
+    console.error("Failed to write activity log:", error);
+    return null;
+  }
 }
