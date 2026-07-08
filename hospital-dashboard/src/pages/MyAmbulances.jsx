@@ -14,10 +14,9 @@ function MyAmbulances() {
     if (!user?.hospitalId) return;
 
     const q = query(
-      collection(db, 'pending_ambulances'),
-      where('hospitalId', '==', user.hospitalId),
-      where('status', '==', 'approved')
-    );
+  collection(db, 'ambulances'),
+  where('hospitalId', '==', user.hospitalId)
+);
 
     const unsub = onSnapshot(q, (snap) => {
       setAmbulances(snap.docs.map((item) => ({ id: item.id, ...item.data() })));
@@ -37,8 +36,7 @@ function MyAmbulances() {
         </span>
       ),
     },
-    { title: 'Manufacturer', dataIndex: 'manufacturer' },
-    { title: 'Model', dataIndex: 'model' },
+   
     { title: 'Registration No', dataIndex: 'registrationNumber' },
     { title: 'Vehicle Type', dataIndex: 'vehicleType' },
     { title: 'Capacity', dataIndex: 'capacity' },
