@@ -47,13 +47,21 @@ function Sidebar() {
                 </NavLink>
               </li>
               <li className="sidebar-item">
-  <NavLink
-    className={({ isActive }) => (isActive ? 'sidebar-link active' : 'sidebar-link')}
-    to="/my-drivers"
-  >
-    <FiUsers /> My Drivers
-  </NavLink>
-</li>
+                <NavLink
+                  className={({ isActive }) => (isActive ? 'sidebar-link active' : 'sidebar-link')}
+                  to="/my-drivers"
+                >
+                  <FiUsers /> My Drivers
+                </NavLink>
+              </li>
+                            <li className="sidebar-item">
+                <NavLink
+                  className={({ isActive }) => (isActive ? 'sidebar-link active' : 'sidebar-link')}
+                  to="/my-ambulances"
+                >
+                  <FiTruck /> My Ambulances
+                </NavLink>
+              </li>
               <li className="sidebar-item">
                 <NavLink className={({ isActive }) => (isActive ? 'sidebar-link active' : 'sidebar-link')} to="/ambulances/register">
                   <FiTruck /> Register Ambulance
