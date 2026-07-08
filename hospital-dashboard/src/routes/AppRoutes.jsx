@@ -9,6 +9,7 @@ import Analytics from '../pages/Analytics';
 import DashboardLayout from '../layouts/DashboardLayout';
 import ProtectedRoute from './ProtectedRoute';
 import MyDrivers from '../pages/MyDrivers';
+import MyAmbulances from '../pages/MyAmbulances';
 
 function AppRoutes() {
   return (
@@ -27,6 +28,7 @@ function AppRoutes() {
         <Route path="/emergencies" element={<ActiveEmergencies />} />
         <Route path="/tracking" element={<LiveTracking />} />
         <Route path="/my-drivers" element={<MyDrivers />} />
+        <Route path="/my-ambulances" element={<MyAmbulances />} />
         <Route path="/emergency/:id" element={<EmergencyDetails />} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />
