@@ -9,15 +9,15 @@ function MyDrivers() {
   const { user } = useContext(AuthContext);
   const [drivers, setDrivers] = useState([]);
   const [loading, setLoading] = useState(true);
+  
 
   useEffect(() => {
     if (!user?.hospitalId) return;
 
-    const q = query(
-      collection(db, 'pending_drivers'),
-      where('hospitalId', '==', user.hospitalId),
-      where('status', '==', 'approved')
-    );
+   const q = query(
+  collection(db, 'drivers'),
+  where('hospitalId', '==', user.hospitalId)
+);
 
     const unsub = onSnapshot(q, (snap) => {
       setDrivers(snap.docs.map((item) => ({ id: item.id, ...item.data() })));
@@ -30,32 +30,55 @@ function MyDrivers() {
   const columns = [
     {
       title: 'Name',
-      dataIndex: 'fullName',
-      render: (name) => (
+      render: (_, row) => (
         <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <FiUser /> {name}
+          <FiUser /> {row.Name || row.fullName || 'N/A'}
         </span>
       ),
     },
-    { title: 'Phone', dataIndex: 'phone' },
-    { title: 'Email', dataIndex: 'email' },
+    {
+      title: 'Phone',
+      render: (_, row) => row['Phone Number'] || row.phone || 'N/A',
+    },
+    {
+      title: 'Email',
+      render: (_, row) => row['Email ID'] || row.email || 'N/A',
+    },
     { title: 'License No', dataIndex: 'licenseNumber' },
     { title: 'License Expiry', dataIndex: 'licenseExpiry' },
-    { title: 'City', dataIndex: 'city' },
-    { title: 'State', dataIndex: 'state' },
+    {
+      title: 'City',
+      render: (_, row) => row.City || row.city || 'N/A',
+    },
+    {
+      title: 'State',
+      render: (_, row) => row.State || row.state || 'N/A',
+    },
     {
       title: 'Availability',
-      dataIndex: 'availability',
-      render: (val) => (
-        <Tag color={val === 'available' ? 'green' : val === 'on_trip' ? 'orange' : 'red'}>
-          {val || 'N/A'}
-        </Tag>
-      ),
+      render: (_, row) => {
+        const val = row.Availability || row.availability || 'N/A';
+        return (
+          <Tag color={val === 'available' ? 'green' : val === 'on_trip' ? 'orange' : 'red'}>
+            {val}
+          </Tag>
+        );
+      },
     },
     {
       title: 'Documents',
       render: (_, row) => (
         <div style={{ display: 'flex', gap: 8 }}>
+          {row.Documents?.aadhaar?.downloadUrl && (
+            <a href={row.Documents.aadhaar.downloadUrl} target="_blank" rel="noreferrer">
+              Aadhaar
+            </a>
+          )}
+          {row.Documents?.drivingLicence?.downloadUrl && (
+            <a href={row.Documents.drivingLicence.downloadUrl} target="_blank" rel="noreferrer">
+              Licence
+            </a>
+          )}
           {row.documents?.aadhaar?.downloadUrl && (
             <a href={row.documents.aadhaar.downloadUrl} target="_blank" rel="noreferrer">
               Aadhaar
@@ -96,5 +119,6 @@ function MyDrivers() {
     </section>
   );
 }
+
 
 export default MyDrivers;
