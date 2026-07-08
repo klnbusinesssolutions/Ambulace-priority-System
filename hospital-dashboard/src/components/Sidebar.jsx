@@ -1,7 +1,7 @@
 import { useContext } from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { FiActivity, FiAlertTriangle, FiBarChart2, FiCheckSquare, FiHome, FiLogOut, FiMapPin, FiPlusCircle, FiTruck, FiUserPlus } from 'react-icons/fi';
+import { FiActivity, FiAlertTriangle, FiBarChart2, FiCheckSquare, FiHome, FiLogOut, FiMapPin, FiPlusCircle, FiTruck, FiUserPlus,FiUsers } from 'react-icons/fi';
 import { AuthContext } from '../context/AuthContext';
 
 function Sidebar() {
@@ -46,6 +46,14 @@ function Sidebar() {
                   <FiUserPlus /> Register Driver
                 </NavLink>
               </li>
+              <li className="sidebar-item">
+  <NavLink
+    className={({ isActive }) => (isActive ? 'sidebar-link active' : 'sidebar-link')}
+    to="/my-drivers"
+  >
+    <FiUsers /> My Drivers
+  </NavLink>
+</li>
               <li className="sidebar-item">
                 <NavLink className={({ isActive }) => (isActive ? 'sidebar-link active' : 'sidebar-link')} to="/ambulances/register">
                   <FiTruck /> Register Ambulance
