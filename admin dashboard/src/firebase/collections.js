@@ -8,11 +8,13 @@ export const COLLECTIONS = {
   drivers: "drivers", // doc id = auto, written by the Android driver app
   pendingDrivers: "pending_drivers", // doc id = auto, written by the hospital dashboard
   pendingAmbulances: "pending_ambulances", // doc id = auto, written by the hospital dashboard
+  ambulances: "ambulances",
   emergencies: "emergencies", // doc id = "EMG001" style or auto
   liveLocations: "live_locations", // doc id = {ambulanceId}
   notifications: "notifications", // doc id = auto
   activityLogs: "activity_logs", // doc id = auto
   analytics: "analytics", // doc id = auto
+  rejectedRequests: "rejected_requests",
 };
 
 export const ADMIN_ROLES = {

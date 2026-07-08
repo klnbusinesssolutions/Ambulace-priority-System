@@ -11,6 +11,7 @@ import VerificationActionButtons from "../../components/ui/VerificationActionBut
 import VerificationStatusBadge from "../../components/ui/VerificationStatusBadge.jsx";
 import { useOps } from "../../context/OpsContext.jsx";
 import { formatDateTime, matchesSearch } from "../../utils/formatters.js";
+import { VERIFICATION_STATUS } from "../../firebase/collections.js";
 
 function driverDocuments(driver) {
   const docs = driver.documents || {};
@@ -23,20 +24,26 @@ function driverDocuments(driver) {
 export default function PendingDrivers() {
   const { pendingDrivers, pendingDriversActions } = useOps();
   const [query, setQuery] = useState("");
-  const [status, setStatus] = useState("All statuses");
   const [selected, setSelected] = useState(null);
   const [modal, setModal] = useState(null);
   const [reason, setReason] = useState("");
 
   const rows = useMemo(
-    () =>
-      pendingDrivers.filter(
-        (driver) =>
-          (status === "All statuses" || driver.status === status) &&
-          matchesSearch(driver, query, ["fullName", "driverName", "email", "phone", "hospitalId", "licenseNumber"]),
-      ),
-    [pendingDrivers, query, status],
-  );
+  () =>
+    pendingDrivers.filter(
+      (driver) =>
+        driver.status === VERIFICATION_STATUS.pending &&
+        matchesSearch(driver, query, [
+          "fullName",
+          "driverName",
+          "email",
+          "phone",
+          "hospitalId",
+          "licenseNumber",
+        ]),
+    ),
+  [pendingDrivers, query],
+); 
 
   function openReasonModal(kind, driver) {
     setSelected(driver);
@@ -56,10 +63,13 @@ export default function PendingDrivers() {
         title="Pending Drivers"
         description="Verification queue from the pending_drivers collection, written by hospital dashboards."
       />
-      <div className="grid gap-3 rounded-lg border border-slate-200 bg-white p-4 md:grid-cols-[minmax(220px,1fr)_220px]">
-        <Input placeholder="Search by name, phone, licence..." value={query} onChange={(event) => setQuery(event.target.value)} />
-        <Select value={status} onChange={(event) => setStatus(event.target.value)} options={["All statuses", "pending", "approved", "rejected", "resubmission_required"]} />
-      </div>
+      <div className="rounded-lg border border-slate-200 bg-white p-4">
+  <Input
+    placeholder="Search by name, phone, licence..."
+    value={query}
+    onChange={(event) => setQuery(event.target.value)}
+  />
+</div>
 
       <DataTable
         rows={rows}
@@ -82,12 +92,14 @@ export default function PendingDrivers() {
                 <Button variant="ghost" size="icon" onClick={() => { setSelected(row); setModal("documents"); }} aria-label="View documents">
                   <FileSearch className="h-4 w-4" />
                 </Button>
-                <VerificationActionButtons
-                  record={row}
-                  onVerify={(driver) => pendingDriversActions.approve(driver)}
-                  onReject={(driver) => openReasonModal("reject", driver)}
-                  onRequestResubmission={(driver) => openReasonModal("resubmit", driver)}
-                />
+                {row.status === VERIFICATION_STATUS.pending && (
+  <VerificationActionButtons
+    record={row}
+    onVerify={(driver) => pendingDriversActions.approve(driver)}
+    onReject={(driver) => openReasonModal("reject", driver)}
+    onRequestResubmission={(driver) => openReasonModal("resubmit", driver)}
+  />
+)}
               </div>
             ),
           },

@@ -1,6 +1,9 @@
 import { COLLECTIONS } from "../../firebase/collections.js";
-import { createCollectionService, where } from "./firestoreCollection.js";
-
+import {
+  createCollectionService,
+  where,
+  serverTimestamp,
+} from "./firestoreCollection.js";
 const drivers = createCollectionService(COLLECTIONS.drivers);
 
 /**
@@ -13,6 +16,10 @@ const drivers = createCollectionService(COLLECTIONS.drivers);
  * Flagging this because it's inconsistent with the rest of the schema —
  * worth confirming with whoever owns the Android app before this ships.
  */
+
+
+
+
 export function normalizeDriver(raw) {
   if (!raw) return raw;
   return {
@@ -57,4 +64,32 @@ export async function updateDriverAvailability(driverId, availability) {
 
 export async function removeDriver(driverId) {
   return drivers.remove(driverId);
+}
+
+export async function createDriver(driver) {
+  return drivers.setById(driver.id, {
+    hospitalId: driver.hospitalId,
+
+    "Hospital Name": driver.hospitalName || "",
+    "Name": driver.fullName || driver.driverName || "",
+    "Email ID": driver.email || "",
+    "Phone Number": driver.phone || "",
+    "Role": "Driver",
+    "Gender": driver.gender || "",
+    "City": driver.city || "",
+    "State": driver.state || "",
+    "Availability": "available",
+    "Documents": driver.documents || {},
+
+    aadhaarNumber: driver.aadhaarNumber || "",
+    licenseNumber: driver.licenseNumber || "",
+    licenseExpiry: driver.licenseExpiry || "",
+    emergencyContact: driver.emergencyContact || "",
+
+    location: null,
+    tripStatus: "idle",
+
+    approvedAt: serverTimestamp(),
+    updatedAt: serverTimestamp(),
+  });
 }

@@ -5,6 +5,8 @@ import { createActivityLog } from "./activityLogService.js";
 import { createNotification } from "./notificationsService.js";
 import { getCurrentAdmin } from "../auth/adminAuthService.js";
 import { getFirebaseApp } from "../../firebase/client.js";
+import { createAmbulance as createApprovedAmbulance } from "./ambulancesService.js";
+import { createRejectedRequest } from "./rejectedRequestsService.js";
 
 const pendingAmbulances = createCollectionService(COLLECTIONS.pendingAmbulances);
 
@@ -31,53 +33,86 @@ export async function listenToAllAmbulances(callback, onError) {
 
 export async function approvePendingAmbulance(ambulance) {
   const admin = await getCurrentAdmin();
-  await pendingAmbulances.update(ambulance.id, {
-    status: VERIFICATION_STATUS.approved,
-    rejectionReason: null,
-    adminReviewMessage: "",
-    approvedAt: serverTimestamp(),
-    availability: ambulance.availability || "available",
+
+  // Create approved ambulance
+  await createApprovedAmbulance({
+    id: ambulance.id,
+    hospitalId: ambulance.hospitalId,
+    hospitalName: ambulance.hospitalName,
+
+    registrationNumber: ambulance.registrationNumber,
+    numberPlate: ambulance.numberPlate,
+    vehicleType: ambulance.vehicleType,
+    capacity: ambulance.capacity,
+    availability: ambulance.availability,
+
+    assignedDrivers: ambulance.assignedDrivers,
+    activeDriverId: ambulance.activeDriverId,
+
+    documents: ambulance.documents,
   });
 
+  // Notification
   await createNotification({
     hospitalId: ambulance.hospitalId,
     type: "ambulance_approved",
     title: "Ambulance Approved",
-    message: `Ambulance ${ambulance.numberPlate || ambulance.registrationNumber} has been approved`,
+    message: `Ambulance ${
+      ambulance.numberPlate || ambulance.registrationNumber
+    } has been approved`,
   });
 
+  // Activity Log
   await createActivityLog({
     hospitalId: ambulance.hospitalId,
     action: "ambulance_approved",
     performedBy: admin?.uid || "unknown",
     targetId: ambulance.id,
-    details: `Ambulance ${ambulance.numberPlate || ambulance.registrationNumber} approved`,
+    details: `Ambulance ${
+      ambulance.numberPlate || ambulance.registrationNumber
+    } approved`,
   });
+
+  // Remove from pending collection
+  await pendingAmbulances.remove(ambulance.id);
 }
 
 export async function rejectPendingAmbulance(ambulance, rejectionReason = "") {
   const admin = await getCurrentAdmin();
-  await pendingAmbulances.update(ambulance.id, {
+
+  // Move to rejected_requests
+  await createRejectedRequest({
+    ...ambulance,
+    requestType: "ambulance",
     status: VERIFICATION_STATUS.rejected,
     rejectionReason,
+    rejectedAt: serverTimestamp(),
   });
 
+  // Create notification
   await createNotification({
     hospitalId: ambulance.hospitalId,
     type: "ambulance_rejected",
     title: "Ambulance Rejected",
-    message: `Ambulance ${ambulance.numberPlate || ambulance.registrationNumber} was rejected`,
+    message: `Ambulance ${
+      ambulance.numberPlate || ambulance.registrationNumber
+    } was rejected`,
   });
 
+  // Create activity log
   await createActivityLog({
     hospitalId: ambulance.hospitalId,
     action: "ambulance_rejected",
     performedBy: admin?.uid || "unknown",
     targetId: ambulance.id,
-    details: `Ambulance ${ambulance.numberPlate || ambulance.registrationNumber} rejected: ${rejectionReason || "no reason given"}`,
+    details: `Ambulance ${
+      ambulance.numberPlate || ambulance.registrationNumber
+    } rejected: ${rejectionReason || "no reason given"}`,
   });
-}
 
+  // Remove from pending collection
+  await pendingAmbulances.remove(ambulance.id);
+}
 export async function requestAmbulanceResubmission(ambulance, rejectionReason = "") {
   const admin = await getCurrentAdmin();
   await pendingAmbulances.update(ambulance.id, {

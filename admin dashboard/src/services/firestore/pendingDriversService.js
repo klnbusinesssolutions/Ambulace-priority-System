@@ -1,8 +1,10 @@
 import { COLLECTIONS, VERIFICATION_STATUS } from "../../firebase/collections.js";
 import { createCollectionService, orderBy, serverTimestamp, where } from "./firestoreCollection.js";
-import { createActivityLog } from "./activityLogService.js";
 import { createNotification } from "./notificationsService.js";
 import { getCurrentAdmin } from "../auth/adminAuthService.js";
+import { createActivityLog } from "./activityLogService.js";
+import { createDriver } from "./driversService.js";
+import { createRejectedRequest } from "./rejectedRequestsService.js";
 
 const pendingDrivers = createCollectionService(COLLECTIONS.pendingDrivers);
 
@@ -26,13 +28,27 @@ export async function listenToPendingDriversByHospital(hospitalId, callback, onE
  */
 export async function approvePendingDriver(pendingDriver) {
   const admin = await getCurrentAdmin();
-  await pendingDrivers.update(pendingDriver.id, {
-    status: VERIFICATION_STATUS.approved,
-    rejectionReason: null,
-    adminReviewMessage: "",
-    approvedAt: serverTimestamp(),
+
+  // Create driver in live drivers collection
+  await createDriver({
+    id: pendingDriver.id,
+    hospitalId: pendingDriver.hospitalId,
+    hospitalName: pendingDriver.hospitalName,
+    fullName: pendingDriver.fullName,
+    driverName: pendingDriver.driverName,
+    email: pendingDriver.email,
+    phone: pendingDriver.phone,
+    gender: pendingDriver.gender,
+    city: pendingDriver.city,
+    state: pendingDriver.state,
+    documents: pendingDriver.documents,
+    aadhaarNumber: pendingDriver.aadhaarNumber,
+    licenseNumber: pendingDriver.licenseNumber,
+    licenseExpiry: pendingDriver.licenseExpiry,
+    emergencyContact: pendingDriver.emergencyContact,
   });
 
+  // Create notification
   await createNotification({
     hospitalId: pendingDriver.hospitalId,
     type: "driver_approved",
@@ -40,6 +56,7 @@ export async function approvePendingDriver(pendingDriver) {
     message: `Driver ${pendingDriver.fullName || pendingDriver.driverName} has been approved`,
   });
 
+  // Create activity log
   await createActivityLog({
     hospitalId: pendingDriver.hospitalId,
     action: "driver_approved",
@@ -47,15 +64,23 @@ export async function approvePendingDriver(pendingDriver) {
     targetId: pendingDriver.id,
     details: `Driver ${pendingDriver.fullName || pendingDriver.driverName} approved`,
   });
+
+  // Remove from pending collection
+  await pendingDrivers.remove(pendingDriver.id);
 }
 
 export async function rejectPendingDriver(pendingDriver, rejectionReason = "") {
   const admin = await getCurrentAdmin();
-  await pendingDrivers.update(pendingDriver.id, {
+
+  // Copy the request to rejected_requests
+  await createRejectedRequest({
+    ...pendingDriver,
     status: VERIFICATION_STATUS.rejected,
     rejectionReason,
+    rejectedAt: serverTimestamp(),
   });
 
+  // Notify the hospital
   await createNotification({
     hospitalId: pendingDriver.hospitalId,
     type: "driver_rejected",
@@ -63,13 +88,19 @@ export async function rejectPendingDriver(pendingDriver, rejectionReason = "") {
     message: `Driver ${pendingDriver.fullName || pendingDriver.driverName} was rejected`,
   });
 
+  // Log the admin action
   await createActivityLog({
     hospitalId: pendingDriver.hospitalId,
     action: "driver_rejected",
     performedBy: admin?.uid || "unknown",
     targetId: pendingDriver.id,
-    details: `Driver ${pendingDriver.fullName || pendingDriver.driverName} rejected: ${rejectionReason || "no reason given"}`,
+    details: `Driver ${pendingDriver.fullName || pendingDriver.driverName} rejected: ${
+      rejectionReason || "no reason given"
+    }`,
   });
+
+  // Remove it from pending_drivers
+  await pendingDrivers.remove(pendingDriver.id);
 }
 
 export async function requestPendingDriverResubmission(pendingDriver, rejectionReason = "") {
@@ -86,6 +117,7 @@ export async function requestPendingDriverResubmission(pendingDriver, rejectionR
     title: "Driver Resubmission Requested",
     message: `Resubmission requested for driver ${pendingDriver.fullName || pendingDriver.driverName}`,
   });
+  
 
   await createActivityLog({
     hospitalId: pendingDriver.hospitalId,
@@ -99,3 +131,5 @@ export async function requestPendingDriverResubmission(pendingDriver, rejectionR
 export async function removePendingDriver(id) {
   return pendingDrivers.remove(id);
 }
+
+
