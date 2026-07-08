@@ -25,6 +25,31 @@ function mapSnapshot(snapshot) {
   }));
 }
 
+function validateDriverRequestValues(values) {
+  const aadhaarNumber = String(values?.aadhaarNumber || '').trim();
+  const licenseNumber = String(values?.licenseNumber || '').trim().toUpperCase();
+  const phone = String(values?.phone || '').trim();
+
+  const errors = [];
+
+  if (!/^\d{12}$/.test(aadhaarNumber)) {
+    errors.push('Aadhaar number must be exactly 12 digits.');
+  }
+
+  const licensePattern = /^(?:[A-Z]{2}[ -]?\d{2}(?:[ -]?\d{6,10})|[A-Z]{2}\d{2}[A-Z]{2}\d{4}|[A-Z]{2}\d{2}[ -]?\d{4}[ -]?\d{7})$/;
+  if (!licensePattern.test(licenseNumber)) {
+    errors.push('License number must follow a standard Indian driving license format.');
+  }
+
+  if (!/^\d{10}$/.test(phone)) {
+    errors.push('Phone number must be exactly 10 digits.');
+  }
+
+  if (errors.length > 0) {
+    throw new Error(`Invalid driver request data: ${errors.join(' ')}`);
+  }
+}
+
 async function uploadHospitalDocument({ hospitalId, requestType, requestId, fieldName, file }) {
   if (!file) return null;
 
@@ -57,6 +82,8 @@ async function uploadHospitalDocument({ hospitalId, requestType, requestId, fiel
 
 export async function createDriverRequest(hospitalId, values) {
   const user = requireSignedInUser();
+  validateDriverRequestValues(values);
+
   const requestRef = doc(collection(db, 'pending_drivers'));
 
   const documents = {
@@ -140,6 +167,8 @@ export async function createAmbulanceRequest(hospitalId, values) {
 }
 
 export async function resubmitDriverRequest(hospitalId, requestId, values) {
+  validateDriverRequestValues(values);
+
   const uploads = await Promise.all([
     values.aadhaarCard
       ? uploadHospitalDocument({ hospitalId, requestType: 'driver', requestId, fieldName: 'aadhaar', file: values.aadhaarCard })

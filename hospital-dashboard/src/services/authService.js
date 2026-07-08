@@ -20,7 +20,7 @@ export async function signInHospitalUser(email, password) {
     throw new Error('This account does not have active dashboard access.');
   }
 
-  if (!['hospital_admin', 'super_admin', 'admin', 'driver'].includes(profile.role)) {
+  if (!['hospital_admin', 'super_admin', 'admin'].includes(profile.role)) {
     await signOut(auth);
     throw new Error('This account is not allowed on this dashboard.');
   }
