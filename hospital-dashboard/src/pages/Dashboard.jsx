@@ -146,7 +146,7 @@ function Dashboard() {
 
       <div className="stats-grid">
  <StatCard icon={FiUsers} label="Total Drivers" value={hospitalStats.totalDrivers} helper="approved" onClick={() => navigate('/my-drivers')} />
-  <StatCard icon={FiTruck} label="Total Ambulances" value={hospitalStats.totalAmbulances} helper="approved" onClick={() => navigate('/approvals')} />
+  <StatCard icon={FiTruck} label="Total Ambulances" value={hospitalStats.totalAmbulances} helper="approved" onClick={() => navigate('/my-ambulances')}/>
   <StatCard icon={FiCheckCircle} label="Pending Approvals" value={hospitalStats.pendingApprovals} helper="drivers + ambulances" tone="amber" onClick={() => navigate('/approvals')} />
   <StatCard icon={FiAlertTriangle} label="Active Emergencies" value={hospitalStats.activeEmergencies} helper="status not resolved" tone="red" onClick={() => navigate('/emergencies')} />
   <StatCard icon={FiShield} label="Unread Notifications" value={hospitalStats.unreadNotifications} helper="count only" tone="amber"onClick={() => document.querySelector('.bell-button')?.click()}/>
