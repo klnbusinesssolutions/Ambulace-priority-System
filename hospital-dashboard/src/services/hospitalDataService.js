@@ -74,11 +74,10 @@ const driversUnsub = onSnapshot(
     (error) => console.error('Drivers listener error:', error.message)
   );
   
-  const ambulancesUnsub = onSnapshot(
+ const ambulancesUnsub = onSnapshot(
     query(
-      collection(db, 'pending_ambulances'),
-      where('hospitalId', '==', hospitalId),
-      orderBy('submittedAt', 'desc')
+      collection(db, 'ambulances'),
+      where('hospitalId', '==', hospitalId)
     ),
     (snap) => emit('ambulances', mapSnapshot(snap)),
     (error) => console.error('Ambulances listener error:', error.message)
