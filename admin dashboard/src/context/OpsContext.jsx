@@ -3,6 +3,9 @@ import { hasFirebaseConfig } from "../firebase/client.js";
 import { VERIFICATION_STATUS } from "../firebase/collections.js";
 import { useAuth } from "./AuthContext.jsx";
 
+import { listenToAmbulances } from "../services/firestore/ambulancesService.js";
+
+
 import { listenToHospitals, createHospital, updateHospital, removeHospital } from "../services/firestore/hospitalsService.js";
 import { listenToDrivers, updateDriverAvailability, removeDriver } from "../services/firestore/driversService.js";
 import {
@@ -78,6 +81,11 @@ export function OpsProvider({ children }) {
   const [pendingDrivers] = useLiveCollection(listenToPendingDrivers, demoPendingDrivers);
   const [drivers] = useLiveCollection(listenToDrivers, demoDrivers);
   const [pendingAmbulances] = useLiveCollection(listenToPendingAmbulances, demoPendingAmbulances);
+  const [ambulances] = useLiveCollection(
+  listenToAmbulances,
+  []
+);
+  console.log("Pending Ambulances:", pendingAmbulances);
   const [emergencies] = useLiveCollection(listenToEmergencies, demoEmergencies);
   const [liveLocations] = useLiveCollection(listenToLiveLocations, demoLiveLocations);
   const [notifications, setNotifications] = useLiveCollection(listenToNotifications, demoNotifications);
@@ -94,10 +102,7 @@ export function OpsProvider({ children }) {
     dispatchMode: "Balanced",
   });
 
-  const approvedAmbulances = useMemo(
-    () => pendingAmbulances.filter((unit) => unit.status === VERIFICATION_STATUS.approved),
-    [pendingAmbulances],
-  );
+
 
   const hospitalsActions = {
     add: (record) => createHospital(record.hospitalId, record),
@@ -140,6 +145,8 @@ export function OpsProvider({ children }) {
     },
   };
 
+  console.log("Pending Ambulances:", pendingAmbulances);
+  
   const value = useMemo(() => {
     const pendingDriverRequests = pendingDrivers.filter((driver) => driver.status === VERIFICATION_STATUS.pending).length;
     const pendingAmbulanceRequests = pendingAmbulances.filter((unit) => unit.status === VERIFICATION_STATUS.pending).length;
@@ -176,7 +183,7 @@ export function OpsProvider({ children }) {
         },
         {
           label: "Active Ambulances",
-          value: String(approvedAmbulances.filter((unit) => unit.availability !== "offline").length),
+          value: String(ambulances.filter((unit) => unit.availability !== "offline").length),
           detail: "pending_ambulances · status: approved",
           trend: "active fleet",
           tone: "success",
@@ -192,7 +199,7 @@ export function OpsProvider({ children }) {
       operationalStats: [
         {
           label: "Active Ambulances",
-          value: String(approvedAmbulances.length),
+          value: String(ambulances.length),
           detail: "Verified fleet available",
           trend: "dispatch ready",
           tone: "success",
@@ -213,18 +220,18 @@ export function OpsProvider({ children }) {
         },
       ],
       approvalBreakdown: [
-        { name: "Approved", value: drivers.length + approvedAmbulances.length },
-        { name: "Rejected", value: rejectedRequests },
-        { name: "Pending", value: pendingDriverRequests + pendingAmbulanceRequests },
-        { name: "Resubmission", value: resubmissionRequests },
-      ],
+  { name: "Approved", value: drivers.length + ambulances.length },
+  { name: "Rejected", value: rejectedRequests },
+  { name: "Pending", value: pendingDriverRequests + pendingAmbulanceRequests },
+  { name: "Resubmission", value: resubmissionRequests },
+],
       verificationTrend,
       systemPanels,
       hospitals,
       pendingDrivers,
       drivers,
       pendingAmbulances,
-      ambulances: approvedAmbulances,
+      ambulances: ambulances,
       emergencies,
       activeEmergencies,
       liveLocations,
@@ -241,7 +248,7 @@ export function OpsProvider({ children }) {
       notificationsActions,
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [hospitals, pendingDrivers, drivers, pendingAmbulances, approvedAmbulances, emergencies, liveLocations, activityLogs, notifications, analytics, settings]);
+  }, [hospitals, pendingDrivers, drivers, pendingAmbulances, ambulances, emergencies, liveLocations, activityLogs, notifications, analytics, settings]);
 
   return <OpsContext.Provider value={value}>{children}</OpsContext.Provider>;
 }

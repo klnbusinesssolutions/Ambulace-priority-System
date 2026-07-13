@@ -6,6 +6,7 @@ import PageHeader from "../../components/ui/PageHeader.jsx";
 import StatusBadge from "../../components/ui/StatusBadge.jsx";
 import { useOps } from "../../context/OpsContext.jsx";
 import { formatDateTime } from "../../utils/formatters.js";
+import { GoogleMap, LoadScript, Marker } from "@react-google-maps/api";
 
 /** Fit a set of lat/lng points into a 0-100 plot box, padded a little. */
 function projectPoints(points) {
@@ -44,6 +45,28 @@ export default function LiveTracking() {
     () => projectPoints(enriched.filter((item) => typeof item.lat === "number" && typeof item.lng === "number")),
     [enriched],
   );
+  const mapContainerStyle = {
+  width: "100%",
+  height: "500px",
+};
+
+const defaultCenter = {
+  lat: 18.5204,
+  lng: 73.8567,
+};
+
+const center =
+  enriched.length > 0 &&
+  typeof enriched[0].lat === "number" &&
+  typeof enriched[0].lng === "number"
+    ? {
+        lat: enriched[0].lat,
+        lng: enriched[0].lng,
+      }
+    : defaultCenter;
+    console.log("Enriched:", enriched);
+console.log("Ambulances:", ambulances);
+console.log("Live Locations:", liveLocations);
 
   return (
     <div className="space-y-5">
@@ -66,33 +89,56 @@ export default function LiveTracking() {
       ) : (
         <div className="grid gap-4 lg:grid-cols-[1.1fr_1fr]">
           <Card>
-            <CardContent className="p-5">
-              <p className="mb-3 text-sm font-medium text-slate-700">Relative position map</p>
-              <div className="relative aspect-square w-full overflow-hidden rounded-lg border border-slate-200 bg-slate-50">
-                <svg viewBox="0 0 100 100" className="h-full w-full">
-                  <defs>
-                    <pattern id="grid" width="10" height="10" patternUnits="userSpaceOnUse">
-                      <path d="M 10 0 L 0 0 0 10" fill="none" stroke="#e2e8f0" strokeWidth="0.5" />
-                    </pattern>
-                  </defs>
-                  <rect width="100" height="100" fill="url(#grid)" />
-                  {points.map((point) => (
-                    <g key={point.id} transform={`translate(${point.x} ${point.y})`}>
-                      <circle r="3.2" className={point.emergency ? "fill-red-500" : "fill-emerald-500"} opacity="0.9" />
-                      <circle r="6" className={point.emergency ? "fill-red-500" : "fill-emerald-500"} opacity="0.2">
-                        <animate attributeName="r" values="4;9;4" dur="2s" repeatCount="indefinite" />
-                        <animate attributeName="opacity" values="0.3;0;0.3" dur="2s" repeatCount="indefinite" />
-                      </circle>
-                    </g>
-                  ))}
-                </svg>
-              </div>
-              <div className="mt-3 flex items-center gap-4 text-xs text-slate-500">
-                <span className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-emerald-500" />Idle / available</span>
-                <span className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-red-500" />On an active emergency</span>
-              </div>
-            </CardContent>
-          </Card>
+  <CardContent className="p-5">
+
+    <p className="mb-3 text-sm font-medium text-slate-700">
+      Live Google Map
+    </p>
+
+    <LoadScript
+      googleMapsApiKey={import.meta.env.VITE_GOOGLE_MAPS_API_KEY}
+    >
+      <GoogleMap
+        mapContainerStyle={mapContainerStyle}
+        center={center}
+        zoom={13}
+        onLoad={(map) => {
+  console.log("Map loaded");
+
+  const bounds = new window.google.maps.LatLngBounds();
+
+  enriched.forEach((item) => {
+    if (item.lat && item.lng) {
+      bounds.extend({
+        lat: Number(item.lat),
+        lng: Number(item.lng),
+      });
+    }
+  });
+
+  if (!bounds.isEmpty()) {
+    map.fitBounds(bounds);
+  }
+}}
+      >
+        {enriched.map((item) =>
+          typeof item.lat === "number" &&
+          typeof item.lng === "number" ? (
+            <Marker
+  key={item.id}
+  position={{
+    lat: Number(item.lat),
+    lng: Number(item.lng),
+  }}
+  onLoad={() => console.log("Marker loaded", item)}
+/>
+          ) : null
+        )}
+      </GoogleMap>
+    </LoadScript>
+
+  </CardContent>
+</Card>
 
           <div className="space-y-3">
             {enriched.map((item) => (
