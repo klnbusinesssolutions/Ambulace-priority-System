@@ -1,9 +1,18 @@
+import { useEffect } from "react";
 import { Outlet } from "react-router-dom";
 
 import { Sidebar } from "@/components/layout/Sidebar";
 import { Topbar } from "@/components/layout/Topbar";
+import { usePoliceStore } from "@/store/policeStore";
 
 export function PoliceLayout() {
+  const subscribeToLiveData = usePoliceStore((state) => state.subscribeToLiveData);
+
+  useEffect(() => {
+    const unsubscribe = subscribeToLiveData();
+    return unsubscribe;
+  }, [subscribeToLiveData]);
+
   return (
     <div className="min-h-screen bg-slate-50">
       <div className="flex min-h-screen">

@@ -1,5 +1,9 @@
 export function formatRelativeTime(timestamp) {
+  if (!timestamp) return "--";
+
   const diffMs = Date.now() - new Date(timestamp).getTime();
+  if (Number.isNaN(diffMs)) return "--";
+
   const diffMinutes = Math.max(0, Math.floor(diffMs / 60000));
 
   if (diffMinutes < 1) return "Just now";

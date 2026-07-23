@@ -4,14 +4,28 @@ import { Link } from "react-router-dom";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { usePoliceStore } from "@/store/policeStore";
 
 export function ForgotPassword() {
   const [email, setEmail] = useState("");
   const [isSubmitted, setIsSubmitted] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
+  const [formError, setFormError] = useState("");
+  const resetPasscode = usePoliceStore((state) => state.resetPasscode);
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    setIsSubmitted(true);
+    setIsLoading(true);
+    setFormError("");
+
+    try {
+      await resetPasscode(email);
+      setIsSubmitted(true);
+    } catch (error) {
+      setFormError(error.message || "Unable to send reset link.");
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   return (
@@ -53,10 +67,16 @@ export function ForgotPassword() {
 
                 <Button
                   type="submit"
+                  disabled={isLoading}
                   className="h-12 w-full rounded-xl bg-amber-500 text-lg font-medium text-white shadow-md transition-all hover:bg-amber-600 hover:shadow-lg"
                 >
-                  Send Reset Link
+                  {isLoading ? "Sending..." : "Send Reset Link"}
                 </Button>
+                {formError && (
+                  <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+                    {formError}
+                  </div>
+                )}
               </form>
             ) : (
               <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-center text-sm text-emerald-800">

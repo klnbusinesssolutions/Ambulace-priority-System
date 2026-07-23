@@ -1,10 +1,16 @@
 import { DetailsDrawer } from "@/components/emergencies/DetailsDrawer";
+import { EmergencyFilterBar } from "@/components/emergencies/EmergencyFilterBar";
 import { EmergencyTable } from "@/components/emergencies/EmergencyTable";
+import { TablePagination } from "@/components/emergencies/TablePagination";
 import { Card, CardHeader, CardTitle } from "@/components/ui/card";
+import { useEmergencyTableData } from "@/hooks/useEmergencyTableData";
 import { useFilteredEmergencies } from "@/hooks/useFilteredEmergencies";
+import { usePoliceStore } from "@/store/policeStore";
 
 export function ActiveEmergencies() {
-  const emergencies = useFilteredEmergencies();
+  const allEmergencies = useFilteredEmergencies();
+  const { rows, totalRows, totalPages, page } = useEmergencyTableData();
+  const setPage = usePoliceStore((state) => state.setPage);
 
   return (
     <>
@@ -16,9 +22,11 @@ export function ActiveEmergencies() {
       <Card>
         <CardHeader>
           <CardTitle>Live Emergency Queue</CardTitle>
-          <span className="text-xs text-slate-500">{emergencies.length} active records</span>
+          <span className="text-xs text-slate-500">{totalRows} matching records</span>
         </CardHeader>
-        <EmergencyTable emergencies={emergencies} />
+        <EmergencyFilterBar emergencies={allEmergencies} />
+        <EmergencyTable emergencies={rows} />
+        <TablePagination page={page} totalPages={totalPages} totalRows={totalRows} onPageChange={setPage} />
       </Card>
 
       <DetailsDrawer />

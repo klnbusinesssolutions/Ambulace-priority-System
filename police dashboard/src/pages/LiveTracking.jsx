@@ -8,6 +8,7 @@ import { usePoliceStore } from "@/store/policeStore";
 export function LiveTracking() {
   const emergencies = useFilteredEmergencies();
   const hospitals = usePoliceStore((state) => state.hospitals);
+  const trafficReports = usePoliceStore((state) => state.trafficReports);
 
   return (
     <>
@@ -17,7 +18,7 @@ export function LiveTracking() {
       </div>
 
       <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_340px]">
-        <MapContainer emergencies={emergencies} hospitals={hospitals} />
+        <MapContainer emergencies={emergencies} hospitals={hospitals} trafficReports={trafficReports} />
         <Card>
           <CardHeader>
             <CardTitle>Units On Map</CardTitle>

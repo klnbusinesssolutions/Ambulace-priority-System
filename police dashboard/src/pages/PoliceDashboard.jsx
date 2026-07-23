@@ -1,5 +1,6 @@
 import { AlertCard } from "@/components/alerts/AlertCard";
 import { ActivityItem } from "@/components/activity/ActivityItem";
+import { KpiGrid } from "@/components/dashboard/KpiGrid";
 import { EmergencyCard } from "@/components/emergencies/EmergencyCard";
 import { DetailsDrawer } from "@/components/emergencies/DetailsDrawer";
 import { MapContainer } from "@/components/maps/MapContainer";
@@ -14,6 +15,7 @@ export function PoliceDashboard() {
   const priorityAlerts = usePoliceStore((state) => state.priorityAlerts);
   const activityFeed = usePoliceStore((state) => state.activityFeed);
   const systemStatus = usePoliceStore((state) => state.systemStatus);
+  const trafficReports = usePoliceStore((state) => state.trafficReports);
 
   return (
     <>
@@ -27,9 +29,13 @@ export function PoliceDashboard() {
         </p>
       </div>
 
+      <div className="mb-4">
+        <KpiGrid />
+      </div>
+
       <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_360px]">
         <div className="min-w-0 space-y-4">
-          <MapContainer emergencies={emergencies} hospitals={hospitals} />
+          <MapContainer emergencies={emergencies} hospitals={hospitals} trafficReports={trafficReports} />
           <SystemStatus status={systemStatus} />
         </div>
 

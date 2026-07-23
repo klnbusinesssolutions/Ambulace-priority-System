@@ -39,8 +39,8 @@ export function Settings() {
           </CardHeader>
           <CardContent className="space-y-3 text-sm leading-6 text-slate-600">
             <p>Environment variables are read from Vite-prefixed Firebase keys.</p>
-            <p>Emergency streams can replace mock state through the realtime subscription service.</p>
-            <p>Police route protection is isolated in the routing layer for later auth enforcement.</p>
+            <p>The dashboard reads only Firebase-backed realtime collections and documents.</p>
+            <p>Police route protection uses Firebase Auth and the protected routing layer.</p>
           </CardContent>
         </Card>
       </div>

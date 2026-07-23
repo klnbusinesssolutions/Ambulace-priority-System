@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
-import { Bell, ChevronDown, LogOut, Menu, Radio, Search, Siren } from "lucide-react";
+import { Bell, ChevronDown, LogOut, Menu, MapPin, Radio, Search, Siren } from "lucide-react";
+import { useNavigate } from "react-router-dom";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -11,9 +12,21 @@ export function Topbar() {
   const setSearchQuery = usePoliceStore((state) => state.setSearchQuery);
   const alertCount = usePoliceStore((state) => state.priorityAlerts.length);
   const logout = usePoliceStore((state) => state.logout);
+  const currentOperator = usePoliceStore((state) => state.currentOperator);
+  const liveDataConnected = usePoliceStore((state) => state.liveDataConnected);
+  const systemStatus = usePoliceStore((state) => state.systemStatus);
+  const cityWide = usePoliceStore((state) => state.cityWide);
+  const toggleCityWide = usePoliceStore((state) => state.toggleCityWide);
 
   const [profileOpen, setProfileOpen] = useState(false);
   const profileRef = useRef(null);
+  const navigate = useNavigate();
+  const initials = (currentOperator?.displayName || "Police Operator")
+    .split(" ")
+    .map((part) => part[0])
+    .join("")
+    .slice(0, 2)
+    .toUpperCase();
 
   useEffect(() => {
     function handleClickOutside(event) {
@@ -49,8 +62,17 @@ export function Topbar() {
 
       <div className="hidden items-center gap-2 rounded-md border bg-emerald-50 px-3 py-2 text-xs font-medium text-emerald-700 md:flex">
         <Radio className="h-4 w-4" />
-        Live connected
+        {liveDataConnected ? "Live connected" : systemStatus.firestoreConnection}
       </div>
+
+      <button
+        onClick={toggleCityWide}
+        className="hidden items-center gap-2 rounded-md border bg-white px-3 py-2 text-xs font-medium text-slate-700 transition-colors hover:bg-slate-50 md:flex"
+        title={currentOperator?.station?.name ? `Station: ${currentOperator.station.name}` : "No station assigned"}
+      >
+        <MapPin className="h-4 w-4" />
+        {cityWide ? "Entire city" : currentOperator?.station?.name || "My area"}
+      </button>
 
       <button className="relative flex h-9 items-center gap-2 rounded-md border bg-white px-3 text-sm font-medium text-slate-700">
         <Siren className="h-4 w-4 text-status-critical" />
@@ -67,11 +89,11 @@ export function Topbar() {
           className="flex h-10 items-center gap-3 rounded-md border bg-white px-2 pr-3 transition-colors hover:bg-slate-50"
         >
           <div className="flex h-7 w-7 items-center justify-center rounded-md bg-slate-900 text-xs font-semibold text-white">
-            PK
+            {initials}
           </div>
           <div className="text-left">
-            <p className="text-xs font-semibold text-slate-900">Operator P. Kumar</p>
-            <p className="text-[11px] text-slate-500">Police control</p>
+            <p className="text-xs font-semibold text-slate-900">{currentOperator?.displayName || "Police Operator"}</p>
+            <p className="text-[11px] text-slate-500">{currentOperator?.role || "Police control"}</p>
           </div>
           <ChevronDown className="h-4 w-4 text-slate-400" />
         </button>
@@ -81,7 +103,7 @@ export function Topbar() {
             <button
               onClick={() => {
                 setProfileOpen(false);
-                logout();
+                logout().finally(() => navigate("/login"));
               }}
               className="flex w-full items-center gap-2 px-4 py-2 text-sm text-red-600 transition-colors hover:bg-red-50"
             >

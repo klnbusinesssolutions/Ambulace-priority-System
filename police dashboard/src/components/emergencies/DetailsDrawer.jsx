@@ -1,4 +1,16 @@
-import { Ambulance, CalendarClock, Hospital, MapPin, Phone, Route, UserRound, X } from "lucide-react";
+import {
+  Ambulance,
+  CalendarClock,
+  Check,
+  Gauge,
+  Hospital,
+  MapPin,
+  Phone,
+  Route,
+  Signpost,
+  UserRound,
+  X,
+} from "lucide-react";
 
 import { StatusBadge } from "@/components/police/StatusBadge";
 import { Button } from "@/components/ui/button";
@@ -6,13 +18,63 @@ import { usePoliceStore } from "@/store/policeStore";
 import { cn } from "@/utils/cn";
 import { formatCoordinate, formatRelativeTime } from "@/utils/format";
 
+const TIMELINE_STAGES = [
+  "Emergency Created",
+  "Driver Assigned",
+  "Started",
+  "Reached Pickup",
+  "Patient Picked",
+  "Heading Hospital",
+  "ETA Under 5 Minutes",
+  "Arrived Hospital",
+  "Completed",
+];
+
+function stageFor(emergency) {
+  const etaMinutes = parseInt(emergency.eta, 10);
+  if (!Number.isNaN(etaMinutes) && etaMinutes <= 5) return "ETA Under 5 Minutes";
+  return emergency.timelineStage ?? "Heading Hospital";
+}
+
+function Timeline({ emergency }) {
+  const currentIndex = TIMELINE_STAGES.indexOf(stageFor(emergency));
+
+  return (
+    <div className="space-y-0">
+      {TIMELINE_STAGES.map((stage, index) => {
+        const done = index <= currentIndex;
+        const isCurrent = index === currentIndex;
+        return (
+          <div key={stage} className="flex gap-3">
+            <div className="flex flex-col items-center">
+              <span
+                className={cn(
+                  "flex h-6 w-6 shrink-0 items-center justify-center rounded-full border-2 text-xs font-semibold",
+                  done ? "border-primary bg-primary text-white" : "border-slate-200 bg-white text-slate-400",
+                  isCurrent && "ring-4 ring-primary/15",
+                )}
+              >
+                {done ? <Check className="h-3 w-3" /> : index + 1}
+              </span>
+              {index < TIMELINE_STAGES.length - 1 && (
+                <span className={cn("h-6 w-px", done ? "bg-primary" : "bg-slate-200")} />
+              )}
+            </div>
+            <p className={cn("pb-6 text-sm", done ? "font-medium text-slate-900" : "text-slate-400")}>{stage}</p>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 function DetailRow({ icon: Icon, label, value }) {
   return (
     <div className="flex gap-3 rounded-lg border bg-slate-50 p-3">
       <Icon className="mt-0.5 h-4 w-4 shrink-0 text-slate-500" />
       <div className="min-w-0">
         <p className="text-xs text-slate-500">{label}</p>
-        <p className="mt-1 break-words text-sm font-medium text-slate-900">{value}</p>
+        <p className="mt-1 break-words text-sm font-medium text-slate-900">{value ?? "--"}</p>
       </div>
     </div>
   );
@@ -46,7 +108,7 @@ export function DetailsDrawer() {
               <StatusBadge value={emergency.severity} />
             </div>
             <p className="mt-1 text-sm text-slate-500">
-              {emergency.type} emergency · {emergency.status}
+              {emergency.type ?? "Ambulance"} emergency - {emergency.status ?? "Status pending"}
             </p>
           </div>
           <Button variant="ghost" size="icon" onClick={closeDrawer} aria-label="Close drawer">
@@ -61,12 +123,35 @@ export function DetailsDrawer() {
             <DetailRow icon={Ambulance} label="Ambulance" value={emergency.ambulanceNumber} />
             <DetailRow icon={Hospital} label="Destination hospital" value={emergency.destinationHospital} />
             <DetailRow
+              icon={Gauge}
+              label="Speed / heading"
+              value={`${emergency.speed ?? "--"} km/h · ${emergency.heading ?? "--"}°`}
+            />
+            <DetailRow
+              icon={Signpost}
+              label="Distance / current road"
+              value={`${emergency.distanceRemaining ?? "--"} km · ${emergency.currentRoad ?? "Unknown"}`}
+            />
+            <DetailRow
               icon={MapPin}
               label="Live coordinates"
-              value={`${formatCoordinate(emergency.coordinates.lat)}, ${formatCoordinate(emergency.coordinates.lng)}`}
+              value={
+                emergency.coordinates
+                  ? `${formatCoordinate(emergency.coordinates.lat)}, ${formatCoordinate(emergency.coordinates.lng)}`
+                  : "--"
+              }
             />
             <DetailRow icon={CalendarClock} label="Last updated" value={formatRelativeTime(emergency.lastUpdated)} />
           </div>
+
+          <section className="mt-5 rounded-lg border">
+            <div className="border-b px-4 py-3">
+              <h3 className="text-sm font-semibold text-slate-950">Trip Timeline</h3>
+            </div>
+            <div className="p-4 pb-0">
+              <Timeline emergency={emergency} />
+            </div>
+          </section>
 
           <section className="mt-5 rounded-lg border">
             <div className="border-b px-4 py-3">
@@ -80,9 +165,9 @@ export function DetailsDrawer() {
                 </div>
                 <Route className="h-5 w-5 text-slate-500" />
               </div>
-              <p className="text-sm leading-6 text-slate-600">{emergency.routeNotes}</p>
+              <p className="text-sm leading-6 text-slate-600">{emergency.routeNotes ?? "No route notes available."}</p>
               <div className="space-y-3">
-                {emergency.route.map((point, index) => (
+                {(emergency.route ?? []).map((point, index) => (
                   <div key={`${point.lat}-${point.lng}`} className="flex items-center gap-3">
                     <div className="flex h-7 w-7 items-center justify-center rounded-full bg-slate-100 text-xs font-semibold text-slate-600">
                       {index + 1}

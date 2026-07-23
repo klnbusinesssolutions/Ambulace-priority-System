@@ -10,6 +10,8 @@ import { Login } from "@/pages/Login";
 import { PoliceDashboard } from "@/pages/PoliceDashboard";
 import { Register } from "@/pages/Register";
 import { Settings } from "@/pages/Settings";
+import { TrafficControl } from "@/pages/TrafficControl";
+import { TripAnalytics } from "@/pages/TripAnalytics";
 import { ProtectedRoute } from "@/routes/ProtectedRoute";
 
 export const router = createBrowserRouter([
@@ -37,6 +39,8 @@ export const router = createBrowserRouter([
           { path: "tracking", element: <LiveTracking /> },
           { path: "alerts", element: <Alerts /> },
           { path: "activity", element: <ActivityFeedPage /> },
+          { path: "traffic-control", element: <TrafficControl /> },
+          { path: "analytics", element: <TripAnalytics /> },
           { path: "settings", element: <Settings /> },
         ],
       },

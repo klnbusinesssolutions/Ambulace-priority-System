@@ -10,17 +10,23 @@ export function Login() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+  const [formError, setFormError] = useState("");
   const login = usePoliceStore((state) => state.login);
   const navigate = useNavigate();
 
-  const handleLogin = (e) => {
+  const handleLogin = async (e) => {
     e.preventDefault();
     setIsLoading(true);
-    // Simulate authentication API call
-    setTimeout(() => {
-      login();
+    setFormError("");
+
+    try {
+      await login(email, password);
       navigate("/");
-    }, 1200);
+    } catch (error) {
+      setFormError(error.message || "Unable to authorize access. Check your credentials and try again.");
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   return (
@@ -79,6 +85,12 @@ export function Login() {
                   </Link>
                 </div>
               </div>
+
+              {formError && (
+                <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+                  {formError}
+                </div>
+              )}
 
               <Button
                 type="submit"

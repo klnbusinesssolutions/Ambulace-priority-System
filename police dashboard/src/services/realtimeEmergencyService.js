@@ -1,20 +1,13 @@
-import { collection, onSnapshot, orderBy, query } from "firebase/firestore";
-
-import { firestore } from "@/firebase/config";
+import { FIRESTORE_COLLECTIONS, normalizeEmergencyRecord, subscribeToCollection } from "@/services/firebaseDataService";
+import { sortEmergenciesBySeverity } from "@/services/policeConstants";
 
 export function subscribeToEmergencies(onUpdate, onError) {
-  if (!firestore) {
-    return () => {};
-  }
-
-  const emergenciesQuery = query(collection(firestore, "emergencies"), orderBy("lastUpdated", "desc"));
-
-  return onSnapshot(
-    emergenciesQuery,
-    (snapshot) => {
-      const emergencies = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
-      onUpdate(emergencies);
-    },
+  return subscribeToCollection(
+    FIRESTORE_COLLECTIONS.emergencies,
+    // Your docs use "startTime", not "lastUpdated" - ordering on a missing field
+    // would make Firestore silently exclude every doc from the results.
+    { orderField: "startTime", direction: "desc" },
+    (docs) => onUpdate(sortEmergenciesBySeverity(docs.map(normalizeEmergencyRecord))),
     onError,
   );
 }

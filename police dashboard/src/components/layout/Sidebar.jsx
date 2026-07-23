@@ -2,11 +2,13 @@ import {
   Activity,
   AlertTriangle,
   Ambulance,
+  BarChart3,
   LayoutDashboard,
   Map,
   Menu,
   Settings,
   ShieldCheck,
+  TrafficCone,
   X,
 } from "lucide-react";
 import { NavLink } from "react-router-dom";
@@ -21,6 +23,8 @@ const navItems = [
   { label: "Live Tracking", path: "/tracking", icon: Map },
   { label: "Priority Alerts", path: "/alerts", icon: AlertTriangle },
   { label: "Activity Feed", path: "/activity", icon: Activity },
+  { label: "Traffic Control", path: "/traffic-control", icon: TrafficCone },
+  { label: "Trip Analytics", path: "/analytics", icon: BarChart3 },
   { label: "Settings", path: "/settings", icon: Settings },
 ];
 

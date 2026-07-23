@@ -1,9 +1,19 @@
-import { ActivityItem } from "@/components/activity/ActivityItem";
+import { useEffect, useState } from "react";
+
+import { ActivityRow } from "@/components/activity/ActivityItem";
 import { Card, CardHeader, CardTitle } from "@/components/ui/card";
+import { Table, TableBody, TableHead, TableHeader } from "@/components/ui/table";
 import { usePoliceStore } from "@/store/policeStore";
 
 export function ActivityFeedPage() {
   const activityFeed = usePoliceStore((state) => state.activityFeed);
+  const [, forceRerender] = useState(0);
+
+  // Auto-refresh so "time ago" labels stay current without a page reload.
+  useEffect(() => {
+    const interval = setInterval(() => forceRerender((tick) => tick + 1), 15000);
+    return () => clearInterval(interval);
+  }, []);
 
   return (
     <div>
@@ -15,13 +25,25 @@ export function ActivityFeedPage() {
       <Card>
         <CardHeader>
           <CardTitle>Realtime Operational Feed</CardTitle>
-          <span className="text-xs text-slate-500">{activityFeed.length} recent events</span>
+          <span className="text-xs text-slate-500">{activityFeed.length} recent events · auto-refreshing</span>
         </CardHeader>
-        <div className="divide-y">
-          {activityFeed.map((item) => (
-            <ActivityItem key={item.id} item={item} />
-          ))}
-        </div>
+        <Table>
+          <TableHeader>
+            <tr>
+              <TableHead>Timestamp</TableHead>
+              <TableHead>Action</TableHead>
+              <TableHead>Officer</TableHead>
+              <TableHead>Trip</TableHead>
+              <TableHead>Hospital</TableHead>
+              <TableHead>Driver</TableHead>
+            </tr>
+          </TableHeader>
+          <TableBody>
+            {activityFeed.map((item) => (
+              <ActivityRow key={item.id} item={item} />
+            ))}
+          </TableBody>
+        </Table>
       </Card>
     </div>
   );
