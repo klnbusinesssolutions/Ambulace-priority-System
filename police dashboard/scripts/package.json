@@ -1,0 +1,13 @@
+{
+  "name": "police-officer-approval-script",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Standalone script that creates the Firebase Auth account + temp password for approved police officer requests. Run manually until/unless the Cloud Function equivalent (createPoliceOfficerCredentialsOnApproval in functions/index.js) is deployed.",
+  "main": "approvePoliceOfficers.js",
+  "scripts": {
+    "approve": "node approvePoliceOfficers.js"
+  },
+  "dependencies": {
+    "firebase-admin": "^12.7.0"
+  }
+}
