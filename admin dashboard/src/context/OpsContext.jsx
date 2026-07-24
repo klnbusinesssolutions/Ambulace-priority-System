@@ -91,7 +91,6 @@ export function OpsProvider({ children }) {
   listenToAmbulances,
   []
 );
-  console.log("Pending Ambulances:", pendingAmbulances);
   const [emergencies] = useLiveCollection(listenToEmergencies, demoEmergencies);
   const [liveLocations] = useLiveCollection(listenToLiveLocations, demoLiveLocations);
   const [notifications, setNotifications] = useLiveCollection(listenToNotifications, demoNotifications);
@@ -159,7 +158,6 @@ export function OpsProvider({ children }) {
       listenToPoliceTempCredential(requestId, callback, onError),
   };
 
-  console.log("Pending Ambulances:", pendingAmbulances);
   
   const value = useMemo(() => {
     const pendingDriverRequests = pendingDrivers.filter((driver) => driver.status === VERIFICATION_STATUS.pending).length;
@@ -171,7 +169,9 @@ export function OpsProvider({ children }) {
       pendingDrivers.filter((driver) => driver.status === VERIFICATION_STATUS.resubmissionRequired).length +
       pendingAmbulances.filter((unit) => unit.status === VERIFICATION_STATUS.resubmissionRequired).length;
     const activeEmergencies = emergencies.filter((item) => !["completed", "resolved"].includes(item.status));
-
+    const pendingPoliceRequests = pendingPoliceOfficers.filter(
+  (officer) => officer.status === VERIFICATION_STATUS.pending
+).length;
     return {
       overviewStats: [
         {
@@ -196,12 +196,12 @@ export function OpsProvider({ children }) {
           tone: "success",
         },
         {
-          label: "Active Ambulances",
-          value: String(ambulances.filter((unit) => unit.availability !== "offline").length),
-          detail: "pending_ambulances · status: approved",
-          trend: "active fleet",
-          tone: "success",
-        },
+  label: "Pending Police Officers",
+  value: String(pendingPoliceRequests),
+  detail: "pending_police_officers · status: pending",
+  trend: pendingPoliceRequests ? "needs action" : "clear",
+  tone: pendingPoliceRequests ? "warning" : "success",
+},
         {
           label: "Rejected Requests",
           value: String(rejectedRequests),
@@ -236,7 +236,13 @@ export function OpsProvider({ children }) {
       approvalBreakdown: [
   { name: "Approved", value: drivers.length + ambulances.length },
   { name: "Rejected", value: rejectedRequests },
-  { name: "Pending", value: pendingDriverRequests + pendingAmbulanceRequests },
+  {
+  name: "Pending",
+  value:
+    pendingDriverRequests +
+    pendingAmbulanceRequests +
+    pendingPoliceRequests,
+},
   { name: "Resubmission", value: resubmissionRequests },
 ],
       verificationTrend,
