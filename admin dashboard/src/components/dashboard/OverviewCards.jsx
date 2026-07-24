@@ -9,14 +9,14 @@ export default function OverviewCards({ stats }) {
       {stats.map((stat, index) => {
         const Icon = icons[index] || ClipboardCheck;
         return (
-          <Card key={stat.label}>
-            <CardContent className="p-4">
+          <Card key={stat.label} className="overflow-hidden">
+            <CardContent className="p-5">
               <div className="flex items-start justify-between gap-4">
                 <div>
                   <p className="text-sm font-medium text-slate-500">{stat.label}</p>
-                  <p className="mt-2 text-2xl font-semibold text-slate-950">{stat.value}</p>
+                  <p className="mt-2 text-2xl font-semibold tracking-tight text-slate-950">{stat.value}</p>
                 </div>
-                <div className="grid h-9 w-9 place-items-center rounded-md border border-slate-200 bg-slate-50 text-slate-600">
+                <div className="grid h-10 w-10 place-items-center rounded-xl border border-slate-200/80 bg-slate-50 text-slate-600">
                   <Icon className="h-4 w-4" />
                 </div>
               </div>

@@ -11,7 +11,7 @@ export default function Dashboard() {
   const { overviewStats, operationalStats, emergencies, activityLogs, systemPanels, ambulances, verificationTrend, approvalBreakdown } = useOps();
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 rounded-[28px] border border-slate-200/80 bg-slate-50/70 p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.8)] sm:p-6">
       <PageHeader
         title="Operations Dashboard"
         description="Global emergency coordination overview for hospitals, drivers, ambulances, and platform health."
