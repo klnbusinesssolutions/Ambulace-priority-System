@@ -51,6 +51,12 @@ function Navbar() {
     await markRead(notificationId);
   }
 
+  async function handleMarkAllRead() {
+    await Promise.all(
+      notifications.filter((notification) => !notification.read).map((notification) => markRead(notification.id))
+    );
+  }
+
   return (
     <header className="navbar">
       <div className="navbar-title">
@@ -98,7 +104,8 @@ function Navbar() {
                <NotificationPanel
   notifications={notifications}
   onClose={() => setOpenNotifications(false)}
-  onMarkRead={markRead}
+  onMarkRead={handleMarkRead}
+  onMarkAllRead={handleMarkAllRead}
 />
 
               </motion.div>

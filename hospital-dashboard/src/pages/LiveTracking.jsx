@@ -1,10 +1,35 @@
 import { motion } from 'framer-motion';
+import { Link } from 'react-router-dom';
 import LiveMap from '../components/LiveMap';
 import StatusBadge from '../components/StatusBadge';
 import { useEmergencies } from '../hooks/useEmergencies';
 
 function LiveTracking() {
   const { emergencies, loading } = useEmergencies();
+
+  const formatLocation = (location) => {
+    if (!location?.latitude || !location?.longitude) return 'Location unavailable';
+    return `${location.latitude.toFixed(4)}, ${location.longitude.toFixed(4)}`;
+  };
+
+  const formatTimestamp = (value) => {
+    if (!value) return 'Unknown';
+
+    const date = value?.toDate
+      ? value.toDate()
+      : value?.seconds
+      ? new Date(value.seconds * 1000)
+      : new Date(value);
+
+    if (Number.isNaN(date.getTime())) return 'Unknown';
+
+    return date.toLocaleString([], {
+      month: 'short',
+      day: 'numeric',
+      hour: 'numeric',
+      minute: '2-digit',
+    });
+  };
 
   return (
     <motion.section
@@ -40,24 +65,47 @@ function LiveTracking() {
             </div>
           )}
 
-          {!loading &&
-            emergencies.map((emergency) => (
-              <div className="unit-row" key={emergency.id}>
-                <div>
-                  <strong>{emergency.ambulanceId || 'Unknown Unit'}</strong>
-                  <span>{emergency.driverName || 'Unassigned'}</span>
-                </div>
-                <StatusBadge
-                  status={emergency.status}
-                  priority={emergency.priority}
-                />
-                <small>
-                  {emergency.location?.latitude && emergency.location?.longitude
-                    ? `${emergency.location.latitude.toFixed(4)}, ${emergency.location.longitude.toFixed(4)}`
-                    : 'Location unavailable'}
-                </small>
-              </div>
-            ))}
+          {!loading && emergencies.length > 0 && (
+            <div className="response-table-scroll">
+              <table className="response-table">
+                <thead>
+                  <tr>
+                    <th>Ambulance ID</th>
+                    <th>Driver Name</th>
+                    <th>Current Location</th>
+                    <th>Status</th>
+                    <th>ETA</th>
+                    <th>Emergency ID</th>
+                    <th>Last Updated</th>
+                    <th>Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {emergencies.map((emergency) => (
+                    <tr key={emergency.id}>
+                      <td>{emergency.ambulanceId || emergency.id}</td>
+                      <td>{emergency.driverName || 'Unassigned'}</td>
+                      <td>{formatLocation(emergency.location)}</td>
+                      <td>
+                        <StatusBadge
+                          status={emergency.status}
+                          priority={emergency.priority}
+                        />
+                      </td>
+                      <td>{emergency.eta || 'N/A'}</td>
+                      <td>{emergency.id}</td>
+                      <td>{formatTimestamp(emergency.updatedAt || emergency.createdAt)}</td>
+                      <td>
+                        <Link className="table-action-link" to={`/emergency/${emergency.id}`}>
+                          View
+                        </Link>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
         </aside>
       </section>
     </motion.section>

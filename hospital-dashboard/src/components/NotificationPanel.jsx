@@ -1,7 +1,7 @@
 import { motion } from 'framer-motion';
 import { FiX } from 'react-icons/fi';
 
-export default function NotificationPanel({ notifications = [], onClose, onMarkRead }) {
+export default function NotificationPanel({ notifications = [], onClose, onMarkRead, onMarkAllRead }) {
   return (
     <motion.div
       className="notification-panel glass-card"
@@ -17,11 +17,23 @@ export default function NotificationPanel({ notifications = [], onClose, onMarkR
       <div className="notification-panel-header">
         <div>
           <p className="panel-overline">Dispatch Alerts</p>
-          <strong>Notifications ({notifications.filter((n) => !n.read).length} unread)</strong>
+          <div className="notification-heading-row">
+            <strong>Notifications</strong>
+            <span className="notification-count">{notifications.filter((n) => !n.read).length} unread</span>
+          </div>
         </div>
-        <button className="icon-button small" onClick={onClose} aria-label="Close notifications">
-          <FiX />
-        </button>
+        <div className="notification-panel-actions">
+          <button
+            className="notification-mark-all"
+            onClick={onMarkAllRead}
+            disabled={!notifications.some((note) => !note.read)}
+          >
+            Mark all read
+          </button>
+          <button className="icon-button small" onClick={onClose} aria-label="Close notifications">
+            <FiX />
+          </button>
+        </div>
       </div>
 
       <div className="notification-list">

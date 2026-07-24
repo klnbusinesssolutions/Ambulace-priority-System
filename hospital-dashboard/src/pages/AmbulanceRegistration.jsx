@@ -64,8 +64,9 @@ function AmbulanceRegistration() {
       <div className="title-group compact-title">
         <p className="eyebrow">{resubmitMode ? 'Resubmission' : 'Fleet onboarding'}</p>
         <h2>{resubmitMode ? 'Edit & Resubmit Ambulance' : 'Register Ambulance'}</h2>
+        <p>Capture the ambulance profile and supporting documentation in a polished review flow for admin approval.</p>
         {resubmitMode && prefill.message && (
-          <div className="status-card rejected">
+          <div className="status-card rejected" style={{ marginTop: 14 }}>
             <strong>Admin feedback:</strong>
             <span>{prefill.message}</span>
           </div>
@@ -86,82 +87,102 @@ function AmbulanceRegistration() {
         </div>
       )}
 
-      <form className="ops-form panel" onSubmit={handleSubmit}>
-        {[
-          ['numberPlate', 'Number plate'],
-          ['manufacturer', 'Manufacturer'],
-          ['model', 'Model'],
-          ['registrationNumber', 'Registration number'],
-        ].map(([field, label]) => (
-          <label key={field}>
-            {label}
-            <Input
-              required
-              value={form[field] || ''}
-              onChange={(event) => update(field, event.target.value)}
+      <form className="ops-form panel form-shell" onSubmit={handleSubmit}>
+        <div className="section-card form-section-card">
+          <h3 className="section-title">Vehicle details</h3>
+          <p className="section-copy">Capture the core fleet registration and transport profile for admin review.</p>
+          <div className="form-grid">
+            {[
+              ['numberPlate', 'Number plate'],
+              ['manufacturer', 'Manufacturer'],
+              ['model', 'Model'],
+              ['registrationNumber', 'Registration number'],
+            ].map(([field, label]) => (
+              <label key={field} className="form-field-card">
+                <span className="field-label">{label}</span>
+                <Input
+                  required
+                  value={form[field] || ''}
+                  onChange={(event) => update(field, event.target.value)}
+                />
+              </label>
+            ))}
+          </div>
+        </div>
+
+        <div className="section-card form-section-card">
+          <h3 className="section-title">Operational profile</h3>
+          <p className="section-copy">Align vehicle capabilities with ambulance response requirements before submission.</p>
+          <div className="form-grid">
+            <label className="form-field-card">
+              <span className="field-label">Vehicle type</span>
+              <Select
+                required
+                options={VEHICLE_TYPES}
+                value={form.vehicleType}
+                onChange={(value) => update('vehicleType', value)}
+              />
+            </label>
+
+            <label className="form-field-card">
+              <span className="field-label">Capacity</span>
+              <Select
+                required
+                options={CAPACITIES.map((value) => ({ value, label: value }))}
+                value={form.capacity}
+                onChange={(value) => update('capacity', value)}
+              />
+            </label>
+          </div>
+        </div>
+
+        <div className="section-card form-section-card">
+          <label className="form-field-card form-field-card--wide">
+            <span className="field-label">Medical capabilities</span>
+            <Checkbox.Group
+              options={MEDICAL_CAPABILITIES}
+              value={form.medicalCapabilities}
+              onChange={(value) => update('medicalCapabilities', value)}
             />
           </label>
-        ))}
 
-        <label>
-          Vehicle type
-          <Select
-            required
-            options={VEHICLE_TYPES}
-            value={form.vehicleType}
-            onChange={(value) => update('vehicleType', value)}
-          />
-        </label>
-
-        <label>
-          Capacity
-          <Select
-            required
-            options={CAPACITIES.map((value) => ({ value, label: value }))}
-            value={form.capacity}
-            onChange={(value) => update('capacity', value)}
-          />
-        </label>
-
-        <label className="full-span">
-          Medical capabilities
-          <Checkbox.Group
-            options={MEDICAL_CAPABILITIES}
-            value={form.medicalCapabilities}
-            onChange={(value) => update('medicalCapabilities', value)}
-          />
-        </label>
-
-        <label className="full-span">
-          Assigned drivers
-          <Select
-            mode="multiple"
-            showSearch
-            value={form.assignedDrivers}
-            options={[]}
-            placeholder="Driver assignment will be enabled after driver approval flow"
-            onChange={(value) => update('assignedDrivers', value)}
-          />
-        </label>
-
-        {[
-          ['rcBook', 'RC Book'],
-          ['insurance', 'Insurance Certificate'],
-          ['puc', 'PUC Certificate'],
-          ['vehiclePhoto', 'Vehicle Photo'],
-        ].map(([field, label]) => (
-          <label key={field}>
-            {label}
-            {resubmitMode && (
-              <span className="body-muted"> (only upload if you want to replace)</span>
-            )}
-            <Input
-              type="file"
-              required={!resubmitMode}
-              onChange={(event) => update(field, event.target.files?.[0])}
+          <label className="form-field-card form-field-card--wide">
+            <span className="field-label">Assigned drivers</span>
+            <Select
+              mode="multiple"
+              showSearch
+              value={form.assignedDrivers}
+              options={[]}
+              placeholder="Driver assignment will be enabled after driver approval flow"
+              onChange={(value) => update('assignedDrivers', value)}
             />
           </label>
-        ))}
+        </div>
+
+        <div className="section-card form-section-card">
+          <h3 className="section-title">Supporting documents</h3>
+          <p className="section-copy">Upload the documents required for admin verification.</p>
+          <div className="form-grid">
+            {[
+              ['rcBook', 'RC Book'],
+              ['insurance', 'Insurance Certificate'],
+              ['puc', 'PUC Certificate'],
+              ['vehiclePhoto', 'Vehicle Photo'],
+            ].map(([field, label]) => (
+              <label key={field} className="form-field-card">
+                <span className="field-label">{label}</span>
+                {resubmitMode && (
+                  <span className="helper-copy">(only upload if you want to replace)</span>
+                )}
+                <Input
+                  type="file"
+                  required={!resubmitMode}
+                  onChange={(event) => update(field, event.target.files?.[0])}
+                />
+              </label>
+            ))}
+          </div>
+        </div>
 
         <Button
           type="primary"

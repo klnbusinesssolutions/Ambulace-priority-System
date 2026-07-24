@@ -1,4 +1,15 @@
 import { motion } from 'framer-motion';
+import {
+  FiAlertTriangle,
+  FiCheckCircle,
+  FiMapPin,
+  FiNavigation,
+  FiRadio,
+  FiShield,
+  FiTruck,
+  FiWifi,
+  FiWifiOff,
+} from 'react-icons/fi';
 
 function ActivityTimeline({ items = [] }) {
   // Helper to format time ago
@@ -20,13 +31,39 @@ function ActivityTimeline({ items = [] }) {
     return 'earlier';
   };
 
+  const getIcon = (iconName) => {
+    switch (iconName) {
+      case 'truck':
+        return <FiTruck />;
+      case 'navigation':
+        return <FiNavigation />;
+      case 'map-pin':
+        return <FiMapPin />;
+      case 'check-circle':
+        return <FiCheckCircle />;
+      case 'shield':
+        return <FiShield />;
+      case 'wifi-off':
+        return <FiWifiOff />;
+      case 'wifi':
+        return <FiWifi />;
+      case 'radio':
+        return <FiRadio />;
+      case 'alert':
+      default:
+        return <FiAlertTriangle />;
+    }
+  };
+
   return (
     <div className="timeline">
       {items.map((item, index) => {
         // Handle both string and object formats for backward compatibility
         const message = typeof item === 'string' ? item : item.message;
+        const title = typeof item === 'string' ? 'Operational event' : item.title || 'Operational event';
         const priority = typeof item === 'string' ? 'info' : item.priority || 'info';
         const timestamp = typeof item === 'string' ? null : item.timestamp;
+        const iconName = typeof item === 'string' ? 'alert' : item.icon || 'alert';
 
         return (
           <motion.div
@@ -36,8 +73,11 @@ function ActivityTimeline({ items = [] }) {
             animate={{ opacity: 1, x: 0 }}
             transition={{ delay: index * 0.08 }}
           >
-            <span />
-            <p>{message}</p>
+            <div className="timeline-icon">{getIcon(iconName)}</div>
+            <div className="timeline-content">
+              <strong>{title}</strong>
+              <p>{message}</p>
+            </div>
             <small>{getTimeAgo(timestamp)}</small>
           </motion.div>
         );

@@ -79,10 +79,10 @@ function Login() {
         animate="visible"
       >
         <motion.span className="login-badge" variants={itemVariants}>
-          <FiRadio /> Emergency Command Center
+          <FiLock /> Secure access
         </motion.span>
 
-        <motion.h1 variants={itemVariants}>National Healthcare Operations</motion.h1>
+        <motion.h1 variants={itemVariants}>Ambulance Dashboard</motion.h1>
 
         <motion.p variants={itemVariants}>
           Sign in with your registered hospital dashboard account.

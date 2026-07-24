@@ -1,6 +1,7 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { motion } from 'framer-motion';
-import { FiFilter, FiX } from 'react-icons/fi';
+import { FiFilter, FiSearch, FiX } from 'react-icons/fi';
+import { Input } from 'antd';
 import EmergencyCard from '../components/EmergencyCard';
 import LoadingSkeleton from '../components/LoadingSkeleton';
 import { useEmergencies } from '../hooks/useEmergencies';
@@ -9,12 +10,23 @@ function ActiveEmergencies() {
   const { emergencies, loading } = useEmergencies();
   const [priorityFilter, setPriorityFilter] = useState('all');
   const [statusFilter, setStatusFilter] = useState('all');
+  const [query, setQuery] = useState('');
 
-  const filteredEmergencies = emergencies.filter((emergency) => {
-    const priorityMatch = priorityFilter === 'all' || emergency.priority === priorityFilter;
-    const statusMatch = statusFilter === 'all' || emergency.status === statusFilter;
-    return priorityMatch && statusMatch;
-  });
+  const filteredEmergencies = useMemo(() => {
+    const normalizedQuery = query.trim().toLowerCase();
+
+    return emergencies.filter((emergency) => {
+      const priorityMatch = priorityFilter === 'all' || emergency.priority === priorityFilter;
+      const statusMatch = statusFilter === 'all' || emergency.status === statusFilter;
+      const queryMatch =
+        normalizedQuery.length === 0 ||
+        [emergency.id, emergency.patientName, emergency.incidentType, emergency.ambulanceId, emergency.driverName]
+          .filter(Boolean)
+          .some((value) => String(value).toLowerCase().includes(normalizedQuery));
+
+      return priorityMatch && statusMatch && queryMatch;
+    });
+  }, [emergencies, priorityFilter, query, statusFilter]);
 
   const criticalCount = filteredEmergencies.filter((e) => e.priority === 'critical').length;
   const highCount = filteredEmergencies.filter((e) => e.priority === 'high').length;
@@ -40,8 +52,17 @@ function ActiveEmergencies() {
 
       {!loading && (
         <motion.div className="filter-controls" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}>
-          <FiFilter />
-          <span className="filter-label">Filter by:</span>
+          <div className="search-bar" style={{ flex: 1, minWidth: 260 }}>
+            <FiSearch />
+            <Input
+              allowClear
+              placeholder="Search by incident ID, patient, or ambulance"
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+              bordered={false}
+              style={{ padding: 0, boxShadow: 'none' }}
+            />
+          </div>
 
           <div className="filter-button-group" aria-label="Priority filter">
             {['all', 'critical', 'high', 'medium', 'low'].map((priority) => (
