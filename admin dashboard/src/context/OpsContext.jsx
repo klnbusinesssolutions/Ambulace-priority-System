@@ -30,6 +30,12 @@ import { listenToNotifications, markNotificationRead } from "../services/firesto
 import { listenToActivityLogs } from "../services/firestore/activityLogService.js";
 import { listenToAnalytics } from "../services/firestore/analyticsService.js";
 import {
+  listenToPendingPoliceOfficers,
+  approvePendingPoliceOfficer,
+  rejectPendingPoliceOfficer,
+  listenToPoliceTempCredential,
+} from "../services/firestore/policeOfficersService.js";
+import {
   demoHospitals,
   demoDrivers,
   demoPendingDrivers,
@@ -91,6 +97,7 @@ export function OpsProvider({ children }) {
   const [notifications, setNotifications] = useLiveCollection(listenToNotifications, demoNotifications);
   const [activityLogs] = useLiveCollection(listenToActivityLogs, demoActivityLogs);
   const [analytics] = useLiveCollection(listenToAnalytics, demoAnalytics);
+  const [pendingPoliceOfficers] = useLiveCollection(listenToPendingPoliceOfficers, []);
 
   const [settings, setSettings] = useState({
     adminName: admin?.displayName || "Super Admin",
@@ -143,6 +150,13 @@ export function OpsProvider({ children }) {
         setNotifications((items) => items.map((item) => (item.id === id ? { ...item, read: true } : item)));
       }
     },
+  };
+
+  const pendingPoliceOfficersActions = {
+    approve: (request, overrides) => approvePendingPoliceOfficer(request, overrides),
+    reject: (request, reason) => rejectPendingPoliceOfficer(request, reason),
+    watchCredentials: (requestId, callback, onError) =>
+      listenToPoliceTempCredential(requestId, callback, onError),
   };
 
   console.log("Pending Ambulances:", pendingAmbulances);
@@ -238,6 +252,7 @@ export function OpsProvider({ children }) {
       activityLogs,
       notifications,
       analytics,
+      pendingPoliceOfficers,
       settings,
       setSettings: (patch) => setSettings((current) => ({ ...current, ...patch })),
       hospitalsActions,
@@ -246,9 +261,10 @@ export function OpsProvider({ children }) {
       pendingAmbulancesActions,
       emergenciesActions,
       notificationsActions,
+      pendingPoliceOfficersActions,
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [hospitals, pendingDrivers, drivers, pendingAmbulances, ambulances, emergencies, liveLocations, activityLogs, notifications, analytics, settings]);
+  }, [hospitals, pendingDrivers, drivers, pendingAmbulances, ambulances, emergencies, liveLocations, activityLogs, notifications, analytics, pendingPoliceOfficers, settings]);
 
   return <OpsContext.Provider value={value}>{children}</OpsContext.Provider>;
 }

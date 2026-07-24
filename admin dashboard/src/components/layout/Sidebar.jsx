@@ -25,6 +25,7 @@ const navItems = [
     children: [
       { label: "Pending Drivers", to: "/admin/verification/pending-drivers" },
       { label: "Pending Ambulances", to: "/admin/verification/pending-ambulances" },
+      { label: "Pending Police Officers", to: "/admin/verification/pending-police-officers" },
       { label: "Rejected Requests", to: "/admin/verification/rejected-requests" },
     ],
   },

@@ -64,6 +64,31 @@ export function createCollectionService(collectionName) {
       return snap.exists() ? { id: snap.id, ...snap.data() } : null;
     },
 
+    /**
+     * Subscribe to realtime updates for a single doc. Callback receives
+     * `null` while the doc doesn't exist yet (e.g. waiting on a Cloud
+     * Function to create it). Returns an unsubscribe function.
+     */
+    async listenById(id, callback, onError) {
+      try {
+        const db = await getDb();
+        return onSnapshot(
+          doc(db, collectionName, id),
+          (snap) => {
+            callback(snap.exists() ? { id: snap.id, ...snap.data() } : null);
+          },
+          (error) => {
+            console.error(`[${collectionName}/${id}] listener error:`, error);
+            onError?.(error);
+          },
+        );
+      } catch (error) {
+        console.error(`[${collectionName}/${id}] failed to start listener:`, error);
+        onError?.(error);
+        return () => {};
+      }
+    },
+
     async getAll(constraints = []) {
       const db = await getDb();
       const q = query(collection(db, collectionName), ...constraints);

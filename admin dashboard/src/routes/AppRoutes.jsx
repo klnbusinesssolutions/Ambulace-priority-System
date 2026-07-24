@@ -10,6 +10,7 @@ import LiveTracking from "../pages/LiveTracking/LiveTracking.jsx";
 import Settings from "../pages/Settings/Settings.jsx";
 import PendingAmbulances from "../pages/Verification/PendingAmbulances.jsx";
 import PendingDrivers from "../pages/Verification/PendingDrivers.jsx";
+import PendingPoliceOfficers from "../pages/Verification/PendingPoliceOfficers.jsx";
 import RejectedRequests from "../pages/Verification/RejectedRequests.jsx";
 import Login from "../pages/Login.jsx";
 import ProtectedRoute from "./ProtectedRoute.jsx";
@@ -35,6 +36,7 @@ export const router = createBrowserRouter([
           { path: "verification", element: <Navigate to="/admin/verification/pending-drivers" replace /> },
           { path: "verification/pending-drivers", element: <PendingDrivers /> },
           { path: "verification/pending-ambulances", element: <PendingAmbulances /> },
+          { path: "verification/pending-police-officers", element: <PendingPoliceOfficers /> },
           { path: "verification/rejected-requests", element: <RejectedRequests /> },
           { path: "hospitals", element: <Hospitals /> },
           { path: "drivers", element: <Drivers /> },

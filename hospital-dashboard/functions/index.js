@@ -138,3 +138,126 @@ exports.createDriverCredentialsOnApproval = onDocumentUpdated(
     await batch.commit();
   }
 );
+
+/**
+ * Same pattern as createDriverCredentialsOnApproval, for the police onboarding
+ * flow: admin dashboard flips `pending_police_officers/{requestId}.status` to
+ * "approved", this creates the real Auth account + `police_officers/{uid}`
+ * profile doc, and drops a temp password the admin can relay to the officer.
+ *
+ * The temp-credential doc is keyed by requestId (not uid) so the admin
+ * dashboard can start watching it the moment it clicks "Approve", before the
+ * Auth user (and its uid) exists yet.
+ */
+exports.createPoliceOfficerCredentialsOnApproval = onDocumentUpdated(
+  'pending_police_officers/{requestId}',
+  async (event) => {
+    const before = event.data.before.data();
+    const after = event.data.after.data();
+
+    if (after.status !== 'approved' || before.status === 'approved') {
+      return;
+    }
+
+    if (after.uid && after.credentialsCreatedAt) {
+      return;
+    }
+
+    if (!after.email || !after.name) {
+      await event.data.after.ref.update({
+        adminReviewMessage: 'Approval failed: email and name are required.',
+        status: 'needs_correction',
+      });
+      return;
+    }
+
+    const password = generateSecurePassword();
+
+    let userRecord;
+    let attempts = 0;
+    const maxAttempts = 3;
+
+    while (attempts < maxAttempts) {
+      try {
+        userRecord = await auth.createUser({
+          email: after.email,
+          password,
+          displayName: after.name,
+          disabled: false,
+        });
+        break;
+      } catch (error) {
+        if (error.code === 'auth/email-already-exists') {
+          userRecord = await auth.getUserByEmail(after.email);
+          await auth.updateUser(userRecord.uid, {
+            password,
+            displayName: after.name,
+            disabled: false,
+          });
+          break;
+        }
+
+        attempts++;
+        if (attempts >= maxAttempts) {
+          await event.data.after.ref.update({
+            adminReviewMessage: `Police officer credential creation failed after ${maxAttempts} attempts: ${error.message}`,
+          });
+          throw error;
+        }
+
+        await new Promise((resolve) => setTimeout(resolve, 1000 * attempts));
+      }
+    }
+
+    const batch = db.batch();
+
+    // Delete rather than update: the admin's pending-queue page only shows
+    // this collection, so once processed the request should disappear from
+    // it. The temp-credentials doc below is keyed by requestId independently,
+    // so the admin dashboard can still find the generated password even
+    // after this doc is gone.
+    batch.delete(event.data.after.ref);
+
+    const officerRef = db.collection('police_officers').doc(userRecord.uid);
+    batch.set(officerRef, {
+      uid: userRecord.uid,
+      email: after.email,
+      badgeId: after.badgeId || '',
+      displayName: after.name || '',
+      department: after.department || '',
+      station: after.station ?? null,
+      serviceRadiusKm: after.serviceRadiusKm ?? 10,
+      role: 'police',
+      isActive: true,
+      requiresPasswordChange: true,
+      onboardedAt: admin.firestore.FieldValue.serverTimestamp(),
+    }, { merge: true });
+
+    const tempCredRef = db.collection('police_temp_credentials').doc(event.params.requestId);
+    batch.set(tempCredRef, {
+      uid: userRecord.uid,
+      requestId: event.params.requestId,
+      name: after.name,
+      badgeId: after.badgeId || '',
+      email: after.email,
+      tempPassword: password,
+      used: false,
+      createdAt: admin.firestore.FieldValue.serverTimestamp(),
+      expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
+    });
+
+    const notificationRef = db.collection('notifications').doc();
+    batch.set(notificationRef, {
+      hospitalId: null,
+      type: 'police_officer_approved',
+      title: 'Police Officer Approved',
+      message: `Officer ${after.name} (badge ${after.badgeId || 'n/a'}) has been approved. Temporary login credentials have been generated.`,
+      requestId: event.params.requestId,
+      credentialsDocPath: `police_temp_credentials/${event.params.requestId}`,
+      read: false,
+      createdAt: admin.firestore.FieldValue.serverTimestamp(),
+    });
+
+    await batch.commit();
+  }
+);
