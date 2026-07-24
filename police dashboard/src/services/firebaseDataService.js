@@ -71,16 +71,26 @@ export function normalizeFirestoreValue(value) {
 
 // Adapts a raw `activity_logs` doc (hospitalId, action, performedBy, targetId,
 // details, createdAt) into the field names ActivityRow expects (type, title,
-// detail, timestamp, hospital, tripId). Note: these logs record admin actions
-// on drivers/ambulances (e.g. "driver_approved"), not ambulance-trip milestones
-// like "emergency-started" - so the icon will fall back to the default (Radio)
-// for all of these until/unless trip-level events are also logged here.
+// detail, timestamp, hospital, tripId). Note: this collection is shared with
+// the admin dashboard, which also logs approval/rejection/onboarding actions
+// on drivers, ambulances, and police officers (e.g. "driver_approved",
+// "police_officer_rejected"). The police dashboard only cares about trip
+// milestones, which tripAlertWatcher.js always writes with a "trip_" prefix
+// (e.g. "trip_reached_patient") - use isTripActivity() below to filter those
+// admin-approval entries out before showing the feed.
 function titleCaseFromAction(action) {
   if (!action) return "Activity";
   return action
     .split("_")
     .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
     .join(" ");
+}
+
+// True only for trip-milestone activity (written by tripAlertWatcher.js),
+// false for admin approval/rejection/onboarding entries in the same collection.
+export function isTripActivity(raw) {
+  const action = raw?.type ?? raw?.action ?? "";
+  return action.startsWith("trip_");
 }
 
 export function normalizeActivityRecord(raw) {

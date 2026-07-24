@@ -15,6 +15,7 @@ import {
   getPoliceOfficerProfile,
   markAllAlertsReadRemote,
   normalizeActivityRecord,
+  isTripActivity,
   normalizeAlertRecord,
   subscribeToCollection,
   subscribeToDocument,
@@ -279,7 +280,7 @@ export const usePoliceStore = create((set, get) => ({
       // Your "activity_logs" docs use "createdAt", not "timestamp".
       { orderField: "createdAt", direction: "desc" },
       (liveActivity) => {
-        set({ activityFeed: liveActivity.map(normalizeActivityRecord) });
+        set({ activityFeed: liveActivity.filter(isTripActivity).map(normalizeActivityRecord) });
         handleConnected();
       },
       handleError,
