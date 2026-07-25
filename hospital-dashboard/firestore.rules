@@ -296,11 +296,12 @@ service cloud.firestore {
       allow create, update, delete: if signedIn() && isApprovedPolice();
     }
 
-    // Police officer profiles. `uid` == the officer's own Firebase Auth uid,
-    // created directly by the officer at registration (Register.jsx ->
-    // authService.requestPoliceAccess) with status "pending" / isActive
-    // false, and only flipped to "approved" by an admin from the admin
-    // dashboard's Pending Police Officers screen.
+    // Police officer profiles. `uid` == the officer's own Firebase Auth uid.
+    // Registration (Register.jsx -> authService.requestPoliceAccess) only
+    // ever writes to pending_police_officers below - this doc doesn't exist
+    // at all until an admin approves or rejects the request from the admin
+    // dashboard's Pending Police Officers screen (policeOfficersService.js),
+    // at which point it's created directly with status "approved"/"rejected".
     match /police_officers/{uid} {
       // Login-by-badge-ID has to resolve badge -> email BEFORE the officer
       // is signed in (authService.js resolveLoginEmail runs pre-auth), so
@@ -309,15 +310,8 @@ service cloud.firestore {
       // ever in Firebase Auth.
       allow read: if true;
 
-      allow create: if signedIn()
-        && uid == request.auth.uid
-        && request.resource.data.uid == uid
-        && request.resource.data.role == 'police'
-        && request.resource.data.status == 'pending'
-        && request.resource.data.isActive == false;
-
-      // Only an admin can approve/reject or change station/radius/isActive.
-      allow update: if signedIn() && isSuperAdmin();
+      // Only an admin creates (on approve/reject) or updates this doc.
+      allow create, update: if signedIn() && isSuperAdmin();
       allow delete: if signedIn() && isSuperAdmin();
     }
 

@@ -18,12 +18,14 @@ export async function listenToPoliceOfficers(callback, onError) {
 /**
  * The officer already created their own Firebase Auth account (and set
  * their own password) at registration time, in Register.jsx - the pending
- * doc carries that account's `uid`. So approving is just a direct Firestore
- * update: flip the `police_officers/{uid}` profile to status "approved" /
- * isActive true (with any station/radius corrections the admin made), then
- * clean up the pending request. No Cloud Function, no generated temp
- * password, no credential hand-off required - the officer logs in with the
- * badge ID/email + password they already chose.
+ * doc carries that account's `uid`. No `police_officers/{uid}` profile
+ * exists yet at this point (registration only writes the pending review
+ * request), so approving CREATES that profile here - from the fields the
+ * officer submitted, plus any station/radius corrections the admin made -
+ * with status "approved" / isActive true, then cleans up the pending
+ * request. No Cloud Function, no generated temp password, no credential
+ * hand-off required - the officer logs in with the badge ID/email +
+ * password they already chose.
  */
 export async function approvePendingPoliceOfficer(request, overrides = {}) {
   const admin = await getCurrentAdmin();
@@ -35,13 +37,24 @@ export async function approvePendingPoliceOfficer(request, overrides = {}) {
   const station = overrides.station ?? request.station ?? null;
   const serviceRadiusKm = overrides.serviceRadiusKm ?? request.serviceRadiusKm ?? 10;
 
-  await policeOfficers.update(request.uid, {
-    status: VERIFICATION_STATUS.approved,
-    isActive: true,
-    station,
-    serviceRadiusKm,
-    approvedAt: serverTimestamp(),
-  });
+  await policeOfficers.setById(
+    request.uid,
+    {
+      uid: request.uid,
+      email: request.email,
+      badgeId: request.badgeId,
+      name: request.name,
+      displayName: request.name,
+      department: request.department,
+      role: "police",
+      status: VERIFICATION_STATUS.approved,
+      isActive: true,
+      station,
+      serviceRadiusKm,
+      approvedAt: serverTimestamp(),
+    },
+    { merge: true },
+  );
 
   await pendingPoliceOfficers.remove(request.id);
 
@@ -77,18 +90,32 @@ export async function rejectPendingPoliceOfficer(request, rejectionReason = "") 
 
   await pendingPoliceOfficers.remove(request.id);
 
-  // The Auth account already exists (created at registration) - mark the
-  // profile rejected so login stays blocked. We can't delete someone else's
-  // Auth account from client-side code (needs the Admin SDK), so the account
+  // The Auth account already exists (created at registration), but there's
+  // no police_officers/{uid} doc yet - registration only ever wrote the
+  // pending request. Create a minimal rejected profile so a login attempt
+  // resolves to the "request was rejected" message instead of the generic
+  // "still awaiting approval" one. We can't delete someone else's Auth
+  // account from client-side code (needs the Admin SDK), so the account
   // itself lingers, but with no approved profile it can never reach the
   // dashboard.
   if (request.uid) {
-    await policeOfficers.update(request.uid, {
-      status: VERIFICATION_STATUS.rejected,
-      isActive: false,
-      rejectionReason,
-      rejectedAt: serverTimestamp(),
-    });
+    await policeOfficers.setById(
+      request.uid,
+      {
+        uid: request.uid,
+        email: request.email,
+        badgeId: request.badgeId,
+        name: request.name,
+        displayName: request.name,
+        department: request.department,
+        role: "police",
+        status: VERIFICATION_STATUS.rejected,
+        isActive: false,
+        rejectionReason,
+        rejectedAt: serverTimestamp(),
+      },
+      { merge: true },
+    );
   }
 }
 
