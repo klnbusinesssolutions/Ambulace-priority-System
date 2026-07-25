@@ -75,6 +75,12 @@ function buildAmbulanceIcon(color, selected) {
 // hospital) per emergency via the Directions API, independently for every emergency so
 // multiple simultaneous trips each get their own route. Skips re-requesting a route whose
 // origin/pickup/destination haven't meaningfully changed since the last successful request.
+// Once the driver has tapped past "Reached Patient" (patient_onboard, near_hospital,
+// trip_completed - see tripAlertWatcher.js / DetailsDrawer.jsx's TRIP_STATUS_STAGE),
+// the patient is already in the ambulance, so the route should go straight from the
+// ambulance's live position to the hospital instead of detouring back through pickup.
+const PATIENT_ALREADY_ONBOARD_STATUSES = new Set(["patient_onboard", "near_hospital", "trip_completed"]);
+
 function useAmbulanceRoutes(emergencies, isLoaded) {
   const [routesById, setRoutesById] = useState({});
   const requestedRef = useRef(new Map()); // emergency id -> fingerprint of the last successful request
@@ -88,7 +94,8 @@ function useAmbulanceRoutes(emergencies, isLoaded) {
       const destination = roundCoord(emergency.destinationHospitalCoordinates);
       if (!origin || !destination) return;
 
-      const pickup = roundCoord(emergency.pickup);
+      const patientOnboard = PATIENT_ALREADY_ONBOARD_STATUSES.has(emergency.tripStatus);
+      const pickup = patientOnboard ? null : roundCoord(emergency.pickup);
       const includePickup = pickup && !sameCoord(pickup, origin) && !sameCoord(pickup, destination);
       const waypoints = includePickup ? [{ location: pickup, stopover: true }] : [];
 
@@ -310,9 +317,12 @@ export function MapContainer({ emergencies, hospitals, trafficReports = [] }) {
 
           // Route not back from the Directions API yet (or it failed) - show a straight
           // line so the ambulance's intended path is never blank while that resolves.
-          const fallbackPath = [emergency.coordinates, emergency.pickup, emergency.destinationHospitalCoordinates].filter(
-            Boolean,
-          );
+          const patientOnboard = PATIENT_ALREADY_ONBOARD_STATUSES.has(emergency.tripStatus);
+          const fallbackPath = [
+            emergency.coordinates,
+            patientOnboard ? null : emergency.pickup,
+            emergency.destinationHospitalCoordinates,
+          ].filter(Boolean);
           return fallbackPath.length > 1 ? (
             <Polyline
               key={`${emergency.id}-route-fallback`}
