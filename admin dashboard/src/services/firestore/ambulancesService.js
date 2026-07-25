@@ -4,24 +4,37 @@ import {
   where,
   serverTimestamp,
 } from "./firestoreCollection.js";
+import { validateAmbulanceForm, formatMedicalCapabilities, validateRegistrationNumber } from "../../utils/ambulanceValidation.js";
 
 const ambulances = createCollectionService(COLLECTIONS.ambulances);
 
 export async function createAmbulance(ambulance) {
+  const registrationNumber = (ambulance.registrationNumber || "").trim().toUpperCase();
+  const medicalCapabilities = formatMedicalCapabilities(ambulance.medicalCapabilities);
+  const payload = { ...ambulance, registrationNumber, medicalCapabilities };
+
+  const errors = validateAmbulanceForm(payload);
+  if (Object.keys(errors).length > 0) {
+    throw new Error(Object.values(errors)[0]);
+  }
+
   return ambulances.setById(ambulance.id, {
-    hospitalId: ambulance.hospitalId,
-    hospitalName: ambulance.hospitalName || "",
+    hospitalId: payload.hospitalId,
+    hospitalName: payload.hospitalName || "",
 
-    registrationNumber: ambulance.registrationNumber || "",
-    numberPlate: ambulance.numberPlate || "",
-    vehicleType: ambulance.vehicleType || "",
-    capacity: ambulance.capacity || "",
-    availability: ambulance.availability || "available",
+    registrationNumber: payload.registrationNumber,
+    numberPlate: payload.numberPlate,
+    manufacturer: payload.manufacturer || "",
+    model: payload.model || "",
+    vehicleType: payload.vehicleType,
+    capacity: payload.capacity,
+    availability: payload.availability || "available",
+    medicalCapabilities: payload.medicalCapabilities,
 
-    assignedDrivers: ambulance.assignedDrivers || [],
-    activeDriverId: ambulance.activeDriverId || null,
+    assignedDrivers: payload.assignedDrivers || [],
+    activeDriverId: payload.activeDriverId || null,
 
-    documents: ambulance.documents || {},
+    documents: payload.documents || {},
 
     location: null,
     status: "approved",
@@ -47,9 +60,19 @@ export async function listenToAmbulancesByHospital(
 }
 
 export async function updateAmbulance(id, patch) {
-  return ambulances.update(id, patch);
+  const updatedPatch = { ...patch };
+  if (updatedPatch.registrationNumber) {
+    updatedPatch.registrationNumber = updatedPatch.registrationNumber.trim().toUpperCase();
+    const regErr = validateRegistrationNumber(updatedPatch.registrationNumber);
+    if (regErr) throw new Error(regErr);
+  }
+  if (updatedPatch.medicalCapabilities) {
+    updatedPatch.medicalCapabilities = formatMedicalCapabilities(updatedPatch.medicalCapabilities);
+  }
+
+  return ambulances.update(id, updatedPatch);
 }
 
 export async function removeAmbulance(id) {
   return ambulances.remove(id);
-}
+}

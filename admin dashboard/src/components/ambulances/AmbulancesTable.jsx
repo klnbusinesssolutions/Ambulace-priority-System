@@ -1,4 +1,4 @@
-import { Check, Eye, FileSearch, RotateCcw, X } from "lucide-react";
+import { Check, Eye, FileSearch, Pencil, RotateCcw, X } from "lucide-react";
 import { formatDateTime } from "../../utils/formatters.js";
 import Button from "../ui/Button.jsx";
 import DataTable from "../ui/DataTable.jsx";
@@ -12,6 +12,7 @@ export default function AmbulancesTable({
   onRequestResubmission,
   onViewDetails,
   onViewDocuments,
+  onEdit,
   showVerificationActions = true,
 }) {
   const columns = [
@@ -42,6 +43,11 @@ export default function AmbulancesTable({
     header: "",
     render: (row) => (
       <div className="flex justify-end gap-1">
+        {onEdit && (
+          <Button variant="ghost" size="icon" onClick={() => onEdit(row)} aria-label={`Edit ${row.numberPlate}`}>
+            <Pencil className="h-4 w-4 text-slate-600" />
+          </Button>
+        )}
         <Button variant="ghost" size="icon" onClick={() => onViewDetails(row)} aria-label={`View ${row.numberPlate}`}>
           <Eye className="h-4 w-4" />
         </Button>
@@ -66,6 +72,7 @@ export default function AmbulancesTable({
       </div>
     ),
   });
+
 
   return <DataTable rows={rows} emptyTitle="No ambulances match this view" columns={columns} />;
 }

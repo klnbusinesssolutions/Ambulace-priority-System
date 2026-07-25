@@ -14,6 +14,7 @@ import {
   rejectPendingDriver,
   requestPendingDriverResubmission,
 } from "../services/firestore/pendingDriversService.js";
+import { listenToRejectedRequests } from "../services/firestore/rejectedRequestsService.js";
 import {
   listenToPendingAmbulances,
   approvePendingAmbulance,
@@ -28,17 +29,21 @@ import { listenToEmergencies, updateEmergencyStatus } from "../services/firestor
 import { listenToLiveLocations } from "../services/firestore/liveLocationsService.js";
 import { listenToNotifications, markNotificationRead } from "../services/firestore/notificationsService.js";
 import { listenToActivityLogs } from "../services/firestore/activityLogService.js";
-import { listenToAnalytics } from "../services/firestore/analyticsService.js";
+import { listenToAnalytics, createAnalyticsRecord, removeAnalyticsRecord } from "../services/firestore/analyticsService.js";
 import {
   listenToPendingPoliceOfficers,
   approvePendingPoliceOfficer,
   rejectPendingPoliceOfficer,
+  requestPoliceOfficerResubmission,
+  listenToPoliceTempCredential,
 } from "../services/firestore/policeOfficersService.js";
 import {
   demoHospitals,
   demoDrivers,
   demoPendingDrivers,
+  demoRejectedRequests,
   demoPendingAmbulances,
+  demoPendingPoliceOfficers,
   demoEmergencies,
   demoLiveLocations,
   demoNotifications,
@@ -83,7 +88,8 @@ function useLiveCollection(listenFn, demoSeed) {
 export function OpsProvider({ children }) {
   const { admin } = useAuth();
   const [hospitals] = useLiveCollection(listenToHospitals, demoHospitals);
-  const [pendingDrivers] = useLiveCollection(listenToPendingDrivers, demoPendingDrivers);
+  const [pendingDrivers, setPendingDrivers] = useLiveCollection(listenToPendingDrivers, demoPendingDrivers);
+  const [rejectedRequestsCollection, setRejectedRequestsCollection] = useLiveCollection(listenToRejectedRequests, demoRejectedRequests);
   const [drivers] = useLiveCollection(listenToDrivers, demoDrivers);
   const [pendingAmbulances] = useLiveCollection(listenToPendingAmbulances, demoPendingAmbulances);
   const [ambulances] = useLiveCollection(
@@ -95,7 +101,7 @@ export function OpsProvider({ children }) {
   const [notifications, setNotifications] = useLiveCollection(listenToNotifications, demoNotifications);
   const [activityLogs] = useLiveCollection(listenToActivityLogs, demoActivityLogs);
   const [analytics] = useLiveCollection(listenToAnalytics, demoAnalytics);
-  const [pendingPoliceOfficers] = useLiveCollection(listenToPendingPoliceOfficers, []);
+  const [pendingPoliceOfficers] = useLiveCollection(listenToPendingPoliceOfficers, demoPendingPoliceOfficers);
 
   const [settings, setSettings] = useState({
     adminName: admin?.displayName || "Super Admin",
@@ -122,17 +128,44 @@ export function OpsProvider({ children }) {
 
   const pendingDriversActions = {
     approve: (driver) => approvePendingDriver(driver),
-    reject: (driver, reason) => rejectPendingDriver(driver, reason),
-    requestResubmission: (driver, reason) => requestPendingDriverResubmission(driver, reason),
+    reject: async (driver, reason) => {
+      const rejectedData = await rejectPendingDriver(driver, reason);
+      if (!firebaseReady) {
+        setPendingDrivers((prev) => prev.filter((d) => d.id !== driver.id));
+        setRejectedRequestsCollection((prev) => [...prev.filter((r) => r.id !== driver.id), rejectedData]);
+      }
+    },
+    requestResubmission: async (driver, reason) => {
+      const resubmitData = await requestPendingDriverResubmission(driver, reason);
+      if (!firebaseReady) {
+        setRejectedRequestsCollection((prev) => prev.filter((r) => r.id !== driver.id));
+        setPendingDrivers((prev) => [...prev.filter((d) => d.id !== driver.id), resubmitData]);
+      }
+    },
   };
+
 
   const pendingAmbulancesActions = {
     add: (record) => createAmbulance(record),
     update: (id, patch) => updateAmbulance(id, patch),
     remove: (id) => removeAmbulance(id),
     approve: (ambulance) => approvePendingAmbulance(ambulance),
-    reject: (ambulance, reason) => rejectPendingAmbulance(ambulance, reason),
-    requestResubmission: (ambulance, reason) => requestAmbulanceResubmission(ambulance, reason),
+    reject: async (ambulance, reason) => {
+      const rejectedData = await rejectPendingAmbulance(ambulance, reason);
+      if (!firebaseReady) {
+        setPendingAmbulances((prev) => prev.filter((a) => a.id !== ambulance.id));
+        setRejectedRequestsCollection((prev) => [...prev.filter((r) => r.id !== ambulance.id), rejectedData]);
+      }
+      return rejectedData;
+    },
+    requestResubmission: async (ambulance, reason) => {
+      const resubmitData = await requestAmbulanceResubmission(ambulance, reason);
+      if (!firebaseReady) {
+        setRejectedRequestsCollection((prev) => prev.filter((r) => r.id !== ambulance.id));
+        setPendingAmbulances((prev) => [...prev.filter((a) => a.id !== ambulance.id), resubmitData]);
+      }
+      return resubmitData;
+    },
     assignDriver: (ambulanceId, driverId) => assignDriverToAmbulance(ambulanceId, driverId),
   };
 
@@ -152,19 +185,48 @@ export function OpsProvider({ children }) {
 
   const pendingPoliceOfficersActions = {
     approve: (request, overrides) => approvePendingPoliceOfficer(request, overrides),
-    reject: (request, reason) => rejectPendingPoliceOfficer(request, reason),
+    reject: async (request, reason) => {
+      const rejectedData = await rejectPendingPoliceOfficer(request, reason);
+      if (!firebaseReady) {
+        setPendingPoliceOfficers((prev) => prev.filter((p) => p.id !== request.id));
+        setRejectedRequestsCollection((prev) => [...prev.filter((r) => r.id !== request.id), rejectedData]);
+      }
+      return rejectedData;
+    },
+    requestResubmission: async (request, reason) => {
+      const resubmitData = await requestPoliceOfficerResubmission(request, reason);
+      if (!firebaseReady) {
+        setRejectedRequestsCollection((prev) => prev.filter((r) => r.id !== request.id));
+        setPendingPoliceOfficers((prev) => [...prev.filter((p) => p.id !== request.id), resubmitData]);
+      }
+      return resubmitData;
+    },
+    watchCredentials: (requestId, callback, onError) =>
+      listenToPoliceTempCredential(requestId, callback, onError),
   };
 
-  
+
+  const analyticsActions = {
+    add: (record) => createAnalyticsRecord(record),
+    remove: (id) => removeAnalyticsRecord(id),
+  };
+
   const value = useMemo(() => {
     const pendingDriverRequests = pendingDrivers.filter((driver) => driver.status === VERIFICATION_STATUS.pending).length;
     const pendingAmbulanceRequests = pendingAmbulances.filter((unit) => unit.status === VERIFICATION_STATUS.pending).length;
-    const rejectedRequests =
-      pendingDrivers.filter((driver) => driver.status === VERIFICATION_STATUS.rejected).length +
-      pendingAmbulances.filter((unit) => unit.status === VERIFICATION_STATUS.rejected).length;
+
+    const allRejectedIds = new Set([
+      ...(rejectedRequestsCollection || []).map((item) => item.id),
+      ...pendingDrivers.filter((driver) => driver.status === VERIFICATION_STATUS.rejected).map((d) => d.id),
+      ...pendingAmbulances.filter((unit) => unit.status === VERIFICATION_STATUS.rejected).map((u) => u.id),
+      ...pendingPoliceOfficers.filter((officer) => officer.status === VERIFICATION_STATUS.rejected).map((o) => o.id),
+    ]);
+    const rejectedRequests = allRejectedIds.size;
+
     const resubmissionRequests =
       pendingDrivers.filter((driver) => driver.status === VERIFICATION_STATUS.resubmissionRequired).length +
-      pendingAmbulances.filter((unit) => unit.status === VERIFICATION_STATUS.resubmissionRequired).length;
+      pendingAmbulances.filter((unit) => unit.status === VERIFICATION_STATUS.resubmissionRequired).length +
+      pendingPoliceOfficers.filter((officer) => officer.status === VERIFICATION_STATUS.resubmissionRequired).length;
     const activeEmergencies = emergencies.filter((item) => !["completed", "resolved"].includes(item.status));
     const pendingPoliceRequests = pendingPoliceOfficers.filter(
   (officer) => officer.status === VERIFICATION_STATUS.pending
@@ -231,21 +293,77 @@ export function OpsProvider({ children }) {
         },
       ],
       approvalBreakdown: [
-  { name: "Approved", value: drivers.length + ambulances.length },
-  { name: "Rejected", value: rejectedRequests },
-  {
-  name: "Pending",
-  value:
-    pendingDriverRequests +
-    pendingAmbulanceRequests +
-    pendingPoliceRequests,
-},
-  { name: "Resubmission", value: resubmissionRequests },
-],
-      verificationTrend,
-      systemPanels,
+        { name: "Approved", value: drivers.length + ambulances.length },
+        { name: "Rejected", value: rejectedRequests },
+        {
+          name: "Pending",
+          value:
+            pendingDriverRequests +
+            pendingAmbulanceRequests +
+            pendingPoliceRequests,
+        },
+        { name: "Resubmission", value: resubmissionRequests },
+      ],
+      verificationTrend: (() => {
+        const trendList = [
+          { day: "Mon", approvals: 0, rejections: 0 },
+          { day: "Tue", approvals: 0, rejections: 0 },
+          { day: "Wed", approvals: 0, rejections: 0 },
+          { day: "Thu", approvals: 0, rejections: 0 },
+          { day: "Fri", approvals: 0, rejections: 0 },
+          { day: "Sat", approvals: 0, rejections: 0 },
+          { day: "Sun", approvals: 0, rejections: 0 },
+        ];
+        const days = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+        const allItems = [
+          ...(rejectedRequestsCollection || []),
+          ...(pendingDrivers || []),
+          ...(pendingAmbulances || []),
+          ...(pendingPoliceOfficers || []),
+        ];
+        allItems.forEach((req) => {
+          const ts = req.approvedAt || req.rejectedAt || req.updatedAt || req.submittedAt || req.createdAt || req.requestedAt;
+          if (!ts) return;
+          const dt = typeof ts?.toDate === "function" ? ts.toDate() : ts instanceof Date ? ts : new Date(ts);
+          if (isNaN(dt.getTime())) return;
+          const dayName = days[dt.getDay()];
+          const item = trendList.find((t) => t.day === dayName);
+          if (item) {
+            if (req.status === VERIFICATION_STATUS.approved) item.approvals += 1;
+            else if (req.status === VERIFICATION_STATUS.rejected) item.rejections += 1;
+          }
+        });
+        return trendList;
+      })(),
+      systemPanels: [
+        {
+          label: "Firestore Database",
+          status: firebaseReady ? "Online" : "Demo mode",
+          metric: `${hospitals.length + drivers.length + ambulances.length + emergencies.length} live docs`,
+          helper: "Connected to live Firestore collections",
+        },
+        {
+          label: "Notifications Feed",
+          status: "Online",
+          metric: `${notifications.length} recent`,
+          helper: "notifications collection (realtime)",
+        },
+        {
+          label: "Live Tracking",
+          status: "Online",
+          metric: `${liveLocations.length} ambulances`,
+          helper: "live_locations collection (realtime)",
+        },
+        {
+          label: "Analytics Pipeline",
+          status: "Online",
+          metric: `${analytics.length} records`,
+          helper: "analytics collection (realtime)",
+        },
+      ],
       hospitals,
       pendingDrivers,
+      rejectedRequests: rejectedRequestsCollection,
       drivers,
       pendingAmbulances,
       ambulances: ambulances,
@@ -265,9 +383,10 @@ export function OpsProvider({ children }) {
       emergenciesActions,
       notificationsActions,
       pendingPoliceOfficersActions,
+      analyticsActions,
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [hospitals, pendingDrivers, drivers, pendingAmbulances, ambulances, emergencies, liveLocations, activityLogs, notifications, analytics, pendingPoliceOfficers, settings]);
+  }, [hospitals, pendingDrivers, rejectedRequestsCollection, drivers, pendingAmbulances, ambulances, emergencies, liveLocations, activityLogs, notifications, analytics, pendingPoliceOfficers, settings]);
 
   return <OpsContext.Provider value={value}>{children}</OpsContext.Provider>;
 }

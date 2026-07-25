@@ -24,26 +24,29 @@ function driverDocuments(driver) {
 export default function PendingDrivers() {
   const { pendingDrivers, pendingDriversActions } = useOps();
   const [query, setQuery] = useState("");
+  const [status, setStatus] = useState("All statuses");
   const [selected, setSelected] = useState(null);
   const [modal, setModal] = useState(null);
   const [reason, setReason] = useState("");
 
   const rows = useMemo(
-  () =>
-    pendingDrivers.filter(
-      (driver) =>
-        driver.status === VERIFICATION_STATUS.pending &&
-        matchesSearch(driver, query, [
-          "fullName",
-          "driverName",
-          "email",
-          "phone",
-          "hospitalId",
-          "licenseNumber",
-        ]),
-    ),
-  [pendingDrivers, query],
-); 
+    () =>
+      pendingDrivers.filter(
+        (driver) =>
+          (status === "All statuses"
+            ? driver.status === VERIFICATION_STATUS.pending || driver.status === VERIFICATION_STATUS.resubmissionRequired
+            : driver.status === status) &&
+          matchesSearch(driver, query, [
+            "fullName",
+            "driverName",
+            "email",
+            "phone",
+            "hospitalId",
+            "licenseNumber",
+          ]),
+      ),
+    [pendingDrivers, query, status],
+  );
 
   function openReasonModal(kind, driver) {
     setSelected(driver);
@@ -63,13 +66,19 @@ export default function PendingDrivers() {
         title="Pending Drivers"
         description="Verification queue from the pending_drivers collection, written by hospital dashboards."
       />
-      <div className="rounded-lg border border-slate-200 bg-white p-4">
-  <Input
-    placeholder="Search by name, phone, licence..."
-    value={query}
-    onChange={(event) => setQuery(event.target.value)}
-  />
-</div>
+      <div className="grid gap-3 rounded-lg border border-slate-200 bg-white p-4 md:grid-cols-[minmax(220px,1fr)_220px]">
+        <Input
+          placeholder="Search by name, phone, licence..."
+          value={query}
+          onChange={(event) => setQuery(event.target.value)}
+        />
+        <Select
+          value={status}
+          onChange={(event) => setStatus(event.target.value)}
+          options={["All statuses", "pending", "resubmission_required"]}
+        />
+      </div>
+
 
       <DataTable
         rows={rows}

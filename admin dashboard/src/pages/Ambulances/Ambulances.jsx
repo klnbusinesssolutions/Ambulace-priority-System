@@ -10,6 +10,7 @@ import PageHeader from "../../components/ui/PageHeader.jsx";
 import Select from "../../components/ui/Select.jsx";
 import { useOps } from "../../context/OpsContext.jsx";
 import { matchesSearch } from "../../utils/formatters.js";
+import { validateAmbulanceForm, formatMedicalCapabilities } from "../../utils/ambulanceValidation.js";
 
 function ambulanceDocuments(ambulance) {
   const docs = ambulance.documents || {};
@@ -28,6 +29,10 @@ export default function Ambulances() {
   const [selected, setSelected] = useState(null);
   const [modal, setModal] = useState(null);
   const [draft, setDraft] = useState(ambulanceDefaults);
+  const [saving, setSaving] = useState(false);
+  const [errorMsg, setErrorMsg] = useState("");
+  const [fieldErrors, setFieldErrors] = useState({});
+
   const hospitalOptions = ["All hospitals", ...Array.from(new Set(ambulances.map((unit) => unit.hospitalId)))];
 
   const rows = useMemo(
@@ -42,12 +47,52 @@ export default function Ambulances() {
 
   function openAdd() {
     setDraft(ambulanceDefaults);
+    setErrorMsg("");
+    setFieldErrors({});
     setModal("add");
   }
 
-  async function submitAdd() {
-    await pendingAmbulancesActions.add(draft);
-    setModal(null);
+  function openEdit(record) {
+    setDraft({ ...ambulanceDefaults, ...record });
+    setErrorMsg("");
+    setFieldErrors({});
+    setModal("edit");
+  }
+
+  async function submitForm() {
+    setErrorMsg("");
+    setFieldErrors({});
+
+    const formattedRegNum = (draft.registrationNumber || "").trim().toUpperCase();
+    const formattedCap = formatMedicalCapabilities(draft.medicalCapabilities);
+
+    const payload = {
+      ...draft,
+      registrationNumber: formattedRegNum,
+      medicalCapabilities: formattedCap,
+    };
+
+    const errors = validateAmbulanceForm(payload);
+    if (Object.keys(errors).length > 0) {
+      setFieldErrors(errors);
+      setErrorMsg(Object.values(errors)[0]);
+      return;
+    }
+
+    setSaving(true);
+    try {
+      if (modal === "edit") {
+        await pendingAmbulancesActions.update(draft.id || draft.ambulanceId, payload);
+      } else {
+        await pendingAmbulancesActions.add(payload);
+      }
+      setModal(null);
+    } catch (err) {
+      console.error("Failed to save ambulance:", err);
+      setErrorMsg(err.message || "Failed to save ambulance. Please try again.");
+    } finally {
+      setSaving(false);
+    }
   }
 
   return (
@@ -64,18 +109,39 @@ export default function Ambulances() {
       <AmbulancesTable
         rows={rows}
         showVerificationActions={false}
+        onEdit={openEdit}
         onViewDetails={(row) => { setSelected(row); setModal("details"); }}
         onViewDocuments={(row) => { setSelected(row); setModal("documents"); }}
       />
 
       <Modal
-        open={modal === "add"}
-        title="Add ambulance"
-        description="Creates a pre-approved record directly in pending_ambulances."
+        open={modal === "add" || modal === "edit"}
+        title={modal === "edit" ? "Edit ambulance" : "Add ambulance"}
+        description={modal === "edit" ? "Update vehicle parameters in pending_ambulances." : "Creates a pre-approved record directly in pending_ambulances."}
         onClose={() => setModal(null)}
-        footer={<><Button variant="secondary" onClick={() => setModal(null)}>Cancel</Button><Button onClick={submitAdd}>Create ambulance</Button></>}
+        footer={
+          <>
+            <Button variant="secondary" onClick={() => setModal(null)} disabled={saving}>Cancel</Button>
+            <Button onClick={submitForm} disabled={saving}>
+              {saving ? "Saving..." : modal === "edit" ? "Save changes" : "Create ambulance"}
+            </Button>
+          </>
+        }
       >
-        <AmbulanceForm value={draft} onChange={setDraft} hospitals={hospitals} />
+        {errorMsg && (
+          <div className="mb-4 rounded-md border border-red-200 bg-red-50 p-3 text-xs font-medium text-red-800">
+            {errorMsg}
+          </div>
+        )}
+        <AmbulanceForm
+          value={draft}
+          onChange={(next) => {
+            setDraft(next);
+            setFieldErrors({});
+          }}
+          hospitals={hospitals}
+          errors={fieldErrors}
+        />
       </Modal>
 
       <Modal
@@ -117,3 +183,4 @@ function Detail({ label, value }) {
     </div>
   );
 }
+

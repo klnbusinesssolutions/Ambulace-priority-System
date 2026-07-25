@@ -1,6 +1,7 @@
 import {
   Activity,
   Ambulance,
+  BarChart3,
   Building2,
   CheckSquare,
   ChevronLeft,
@@ -34,6 +35,7 @@ const navItems = [
   { label: "Ambulances", to: "/admin/ambulances", icon: Ambulance },
   { label: "Live Tracking", to: "/admin/live-tracking", icon: Radar },
   { label: "Active Emergencies", to: "/admin/emergencies", icon: Activity },
+  { label: "Analytics", to: "/admin/analytics", icon: BarChart3 },
   { label: "Activity Logs", to: "/admin/activity-logs", icon: ClipboardList },
   { label: "Settings", to: "/admin/settings", icon: Settings },
 ];

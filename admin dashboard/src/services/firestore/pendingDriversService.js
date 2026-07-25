@@ -1,5 +1,7 @@
+import { doc, getFirestore, writeBatch } from "firebase/firestore";
 import { COLLECTIONS, VERIFICATION_STATUS } from "../../firebase/collections.js";
-import { createCollectionService, orderBy, serverTimestamp, where } from "./firestoreCollection.js";
+import { createCollectionService, orderBy, serverTimestamp, where, hasFirebaseConfig } from "./firestoreCollection.js";
+import { getFirebaseApp } from "../../firebase/client.js";
 import { createNotification } from "./notificationsService.js";
 import { getCurrentAdmin } from "../auth/adminAuthService.js";
 import { createActivityLog } from "./activityLogService.js";
@@ -19,13 +21,6 @@ export async function listenToPendingDriversByHospital(hospitalId, callback, onE
   });
 }
 
-/**
- * Per the schema, `pending_drivers` is the single record for a driver
- * verification request — approving/rejecting updates `status` on the same
- * doc rather than moving it to another collection. The live `drivers`
- * collection is written by the Android driver app once the driver signs in
- * with an approved account, not by this dashboard.
- */
 export async function approvePendingDriver(pendingDriver) {
   const admin = await getCurrentAdmin();
 
@@ -71,65 +66,118 @@ export async function approvePendingDriver(pendingDriver) {
 
 export async function rejectPendingDriver(pendingDriver, rejectionReason = "") {
   const admin = await getCurrentAdmin();
+  const timestamp = serverTimestamp();
 
-  // Copy the request to rejected_requests
-  await createRejectedRequest({
+  const rejectedData = {
     ...pendingDriver,
+    requestType: pendingDriver.requestType || "driver",
     status: VERIFICATION_STATUS.rejected,
-    rejectionReason,
-    rejectedAt: serverTimestamp(),
-  });
+    rejectionReason: rejectionReason || pendingDriver.rejectionReason || "",
+    rejectedAt: pendingDriver.rejectedAt || (hasFirebaseConfig() ? timestamp : new Date().toISOString()),
+    updatedAt: hasFirebaseConfig() ? timestamp : new Date().toISOString(),
+  };
 
-  // Notify the hospital
-  await createNotification({
-    hospitalId: pendingDriver.hospitalId,
-    type: "driver_rejected",
-    title: "Driver Rejected",
-    message: `Driver ${pendingDriver.fullName || pendingDriver.driverName} was rejected`,
-  });
+  if (hasFirebaseConfig()) {
+    const app = await getFirebaseApp();
+    const db = getFirestore(app);
+    const batch = writeBatch(db);
 
-  // Log the admin action
-  await createActivityLog({
-    hospitalId: pendingDriver.hospitalId,
-    action: "driver_rejected",
-    performedBy: admin?.uid || "unknown",
-    targetId: pendingDriver.id,
-    details: `Driver ${pendingDriver.fullName || pendingDriver.driverName} rejected: ${
-      rejectionReason || "no reason given"
-    }`,
-  });
+    const rejectedRef = doc(db, COLLECTIONS.rejectedRequests, pendingDriver.id);
+    const pendingRef = doc(db, COLLECTIONS.pendingDrivers, pendingDriver.id);
 
-  // Remove it from pending_drivers
-  await pendingDrivers.remove(pendingDriver.id);
+    batch.set(rejectedRef, rejectedData);
+    batch.delete(pendingRef);
+
+    // Atomically write to rejected_requests and delete from pending_drivers.
+    // If set fails, delete is NOT performed.
+    await batch.commit();
+
+    try {
+      await createNotification({
+        hospitalId: pendingDriver.hospitalId,
+        type: "driver_rejected",
+        title: "Driver Rejected",
+        message: `Driver ${pendingDriver.fullName || pendingDriver.driverName} was rejected`,
+      });
+    } catch (err) {
+      console.error("Failed to create notification on driver rejection:", err);
+    }
+
+    try {
+      await createActivityLog({
+        hospitalId: pendingDriver.hospitalId,
+        action: "driver_rejected",
+        performedBy: admin?.uid || "unknown",
+        targetId: pendingDriver.id,
+        details: `Driver ${pendingDriver.fullName || pendingDriver.driverName} rejected: ${
+          rejectionReason || pendingDriver.rejectionReason || "no reason given"
+        }`,
+      });
+    } catch (err) {
+      console.error("Failed to create activity log on driver rejection:", err);
+    }
+  }
+
+  return rejectedData;
 }
 
 export async function requestPendingDriverResubmission(pendingDriver, rejectionReason = "") {
   const admin = await getCurrentAdmin();
-  await pendingDrivers.update(pendingDriver.id, {
+  const timestamp = serverTimestamp();
+
+  const resubmitData = {
+    ...pendingDriver,
     status: VERIFICATION_STATUS.resubmissionRequired,
-    rejectionReason,
+    rejectionReason: rejectionReason || pendingDriver.rejectionReason || "",
     resubmittedAt: null,
-  });
+    updatedAt: hasFirebaseConfig() ? timestamp : new Date().toISOString(),
+  };
 
-  await createNotification({
-    hospitalId: pendingDriver.hospitalId,
-    type: "resubmission_required",
-    title: "Driver Resubmission Requested",
-    message: `Resubmission requested for driver ${pendingDriver.fullName || pendingDriver.driverName}`,
-  });
-  
+  if (hasFirebaseConfig()) {
+    const app = await getFirebaseApp();
+    const db = getFirestore(app);
+    const batch = writeBatch(db);
 
-  await createActivityLog({
-    hospitalId: pendingDriver.hospitalId,
-    action: "driver_resubmission_requested",
-    performedBy: admin?.uid || "unknown",
-    targetId: pendingDriver.id,
-    details: `Resubmission requested for driver ${pendingDriver.fullName || pendingDriver.driverName}: ${rejectionReason || "no reason given"}`,
-  });
+    const pendingRef = doc(db, COLLECTIONS.pendingDrivers, pendingDriver.id);
+    const rejectedRef = doc(db, COLLECTIONS.rejectedRequests, pendingDriver.id);
+
+    batch.set(pendingRef, resubmitData);
+    batch.delete(rejectedRef);
+
+    await batch.commit();
+
+    try {
+      await createNotification({
+        hospitalId: pendingDriver.hospitalId,
+        type: "resubmission_required",
+        title: "Driver Resubmission Requested",
+        message: `Resubmission requested for driver ${pendingDriver.fullName || pendingDriver.driverName}`,
+      });
+    } catch (err) {
+      console.error("Failed to create notification on resubmission request:", err);
+    }
+
+    try {
+      await createActivityLog({
+        hospitalId: pendingDriver.hospitalId,
+        action: "driver_resubmission_requested",
+        performedBy: admin?.uid || "unknown",
+        targetId: pendingDriver.id,
+        details: `Resubmission requested for driver ${pendingDriver.fullName || pendingDriver.driverName}: ${
+          rejectionReason || "no reason given"
+        }`,
+      });
+    } catch (err) {
+      console.error("Failed to create activity log on resubmission request:", err);
+    }
+  }
+
+  return resubmitData;
 }
 
 export async function removePendingDriver(id) {
   return pendingDrivers.remove(id);
 }
+
 
 

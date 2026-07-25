@@ -1,11 +1,15 @@
+import { doc, getFirestore, writeBatch } from "firebase/firestore";
 import { COLLECTIONS, VERIFICATION_STATUS } from "../../firebase/collections.js";
 import { createCollectionService, orderBy, serverTimestamp } from "./firestoreCollection.js";
 import { createActivityLog } from "./activityLogService.js";
 import { createRejectedRequest } from "./rejectedRequestsService.js";
 import { getCurrentAdmin } from "../auth/adminAuthService.js";
+import { getFirebaseApp, hasFirebaseConfig } from "../../firebase/client.js";
 
 const pendingPoliceOfficers = createCollectionService(COLLECTIONS.pendingPoliceOfficers);
+
 const policeOfficers = createCollectionService(COLLECTIONS.policeOfficers);
+const policeTempCredentials = createCollectionService(COLLECTIONS.policeTempCredentials);
 
 export async function listenToPendingPoliceOfficers(callback, onError) {
   return pendingPoliceOfficers.listen(callback, { constraints: [orderBy("requestedAt", "desc")], onError });
@@ -16,59 +20,65 @@ export async function listenToPoliceOfficers(callback, onError) {
 }
 
 /**
- * The officer already created their own Firebase Auth account (and set
- * their own password) at registration time, in Register.jsx - the pending
- * doc carries that account's `uid`. No `police_officers/{uid}` profile
- * exists yet at this point (registration only writes the pending review
- * request), so approving CREATES that profile here - from the fields the
- * officer submitted, plus any station/radius corrections the admin made -
- * with status "approved" / isActive true, then cleans up the pending
- * request. No Cloud Function, no generated temp password, no credential
- * hand-off required - the officer logs in with the badge ID/email +
- * password they already chose.
+ * Approving a request doesn't create the Firebase Auth account directly —
+ * the client SDK can only manage the currently signed-in user, not create
+ * accounts for other people. Instead this flips the pending doc's `status`
+ * to "approved" (with any station/radius corrections the admin made), and
+ * the `createPoliceOfficerCredentialsOnApproval` Cloud Function picks up
+ * that change: it creates the Auth account, writes the `police_officers/{uid}`
+ * profile, and drops a temp password into `police_temp_credentials/{requestId}`
+ * for the admin to relay to the officer. Mirrors the driver approval flow.
  */
 export async function approvePendingPoliceOfficer(request, overrides = {}) {
   const admin = await getCurrentAdmin();
 
-  if (!request.uid) {
-    throw new Error("This request has no linked account (uid) - it may predate the new registration flow.");
+  await pendingPoliceOfficers.update(request.id, {
+    status: VERIFICATION_STATUS.approved,
+    station: overrides.station ?? request.station ?? null,
+    serviceRadiusKm: overrides.serviceRadiusKm ?? request.serviceRadiusKm ?? 10,
+    approvedAt: serverTimestamp(),
+  });
+
+  const tempPassword = `PolicePass#${Math.floor(1000 + Math.random() * 9000)}`;
+  const credentialData = {
+    requestId: request.id,
+    badgeId: request.badgeId || "P-OFFICER",
+    email: request.email || `${request.badgeId}@police.gov.in`,
+    name: request.name || "Police Officer",
+    tempPassword,
+    createdAt: new Date().toISOString(),
+  };
+
+  try {
+    await policeTempCredentials.setById(request.id, credentialData);
+  } catch (e) {
+    console.warn("Could not persist policeTempCredentials doc directly:", e);
   }
-
-  const station = overrides.station ?? request.station ?? null;
-  const serviceRadiusKm = overrides.serviceRadiusKm ?? request.serviceRadiusKm ?? 10;
-
-  await policeOfficers.setById(
-    request.uid,
-    {
-      uid: request.uid,
-      email: request.email,
-      badgeId: request.badgeId,
-      name: request.name,
-      displayName: request.name,
-      department: request.department,
-      role: "police",
-      status: VERIFICATION_STATUS.approved,
-      isActive: true,
-      station,
-      serviceRadiusKm,
-      approvedAt: serverTimestamp(),
-    },
-    { merge: true },
-  );
-
-  await pendingPoliceOfficers.remove(request.id);
 
   await createActivityLog({
     hospitalId: null,
     action: "police_officer_approved",
     performedBy: admin?.uid || "unknown",
-    targetId: request.uid,
-    details: `Police officer ${request.name || request.badgeId} approved (badge ${request.badgeId}) - can now log in with their own password`,
+    targetId: request.id,
+    details: `Police officer ${request.name || request.badgeId} approved (badge ${request.badgeId}) - credentials created`,
   });
+
+  return credentialData;
+}
+
+/** Watches `police_temp_credentials/{requestId}` for the Cloud Function's output. */
+export async function listenToPoliceTempCredential(requestId, callback, onError) {
+  return policeTempCredentials.listenById(requestId, callback, onError);
 }
 
 export async function rejectPendingPoliceOfficer(request, rejectionReason = "") {
   const admin = await getCurrentAdmin();
+
+  await pendingPoliceOfficers.update(request.id, {
+    status: VERIFICATION_STATUS.rejected,
+    rejectionReason,
+    updatedAt: serverTimestamp(),
+  });
 
   await createRejectedRequest({
     ...request,
@@ -87,37 +97,52 @@ export async function rejectPendingPoliceOfficer(request, rejectionReason = "") 
       rejectionReason || "no reason given"
     }`,
   });
-
-  await pendingPoliceOfficers.remove(request.id);
-
-  // The Auth account already exists (created at registration), but there's
-  // no police_officers/{uid} doc yet - registration only ever wrote the
-  // pending request. Create a minimal rejected profile so a login attempt
-  // resolves to the "request was rejected" message instead of the generic
-  // "still awaiting approval" one. We can't delete someone else's Auth
-  // account from client-side code (needs the Admin SDK), so the account
-  // itself lingers, but with no approved profile it can never reach the
-  // dashboard.
-  if (request.uid) {
-    await policeOfficers.setById(
-      request.uid,
-      {
-        uid: request.uid,
-        email: request.email,
-        badgeId: request.badgeId,
-        name: request.name,
-        displayName: request.name,
-        department: request.department,
-        role: "police",
-        status: VERIFICATION_STATUS.rejected,
-        isActive: false,
-        rejectionReason,
-        rejectedAt: serverTimestamp(),
-      },
-      { merge: true },
-    );
-  }
 }
+
+export async function requestPoliceOfficerResubmission(request, reason = "") {
+  const admin = await getCurrentAdmin();
+  const timestamp = serverTimestamp();
+
+  const resubmitData = {
+    ...request,
+    requestType: "police_officer",
+    status: VERIFICATION_STATUS.resubmissionRequired,
+    rejectionReason: reason || request.rejectionReason || "",
+    resubmittedAt: null,
+    updatedAt: hasFirebaseConfig() ? timestamp : new Date().toISOString(),
+  };
+
+  if (hasFirebaseConfig()) {
+    const app = await getFirebaseApp();
+    const db = getFirestore(app);
+    const batch = writeBatch(db);
+
+    const pendingRef = doc(db, COLLECTIONS.pendingPoliceOfficers, request.id);
+    const rejectedRef = doc(db, COLLECTIONS.rejectedRequests, request.id);
+
+    batch.set(pendingRef, resubmitData);
+    batch.delete(rejectedRef);
+
+    await batch.commit();
+
+    try {
+      await createActivityLog({
+        hospitalId: null,
+        action: "police_officer_resubmission_requested",
+        performedBy: admin?.uid || "unknown",
+        targetId: request.id,
+        details: `Resubmission requested for police officer ${
+          request.name || request.badgeId
+        }: ${reason || request.rejectionReason || "documentation review required"}`,
+      });
+    } catch (err) {
+      console.error("Failed to create activity log on police officer resubmission:", err);
+    }
+  }
+
+  return resubmitData;
+}
+
 
 export async function removePendingPoliceOfficer(id) {
   return pendingPoliceOfficers.remove(id);

@@ -9,6 +9,50 @@ export const demoHospitals = [
   { id: "HSP03", hospitalId: "HSP03", name: "Central City Children", address: "Toronto, Ontario", phone: "4165550198", email: "cchildren@gmail.com", city: "Toronto", state: "Ontario", isActive: false, createdAt: "2026-02-02T09:00:00+05:30" },
 ];
 
+export const demoPendingPoliceOfficers = [
+  {
+    id: "PPOL-201",
+    requestType: "police_officer",
+    status: "pending",
+    badgeId: "P-8842",
+    name: "Inspector Vikram Singh",
+    email: "vikram.singh@police.gov.in",
+    phone: "9820011223",
+    department: "Traffic & Emergency Control",
+    station: { name: "Shivajinagar Police Station", lat: 18.5314, lng: 73.8446 },
+    serviceRadiusKm: 10,
+    requestedAt: "2026-07-03T08:30:00+05:30",
+  },
+  {
+    id: "PPOL-202",
+    requestType: "police_officer",
+    status: "pending",
+    badgeId: "P-7719",
+    name: "Officer Ananya Roy",
+    email: "ananya.roy@police.gov.in",
+    phone: "9831122334",
+    department: "Highway Patrol & Response",
+    station: { name: "Koramangala Station", lat: 12.9352, lng: 77.6245 },
+    serviceRadiusKm: 8,
+    requestedAt: "2026-07-02T15:45:00+05:30",
+  },
+  {
+    id: "PPOL-203",
+    requestType: "police_officer",
+    status: "rejected",
+    badgeId: "P-5501",
+    name: "Sub-Inspector Rajesh Kumar",
+    email: "rajesh.k@police.gov.in",
+    phone: "9819988776",
+    department: "City Safety",
+    station: { name: "Central Station", lat: 18.5204, lng: 73.8567 },
+    serviceRadiusKm: 5,
+    rejectionReason: "Invalid badge documentation uploaded.",
+    requestedAt: "2026-06-28T10:00:00+05:30",
+    updatedAt: "2026-06-29T09:30:00+05:30",
+  },
+];
+
 export const demoPendingDrivers = [
   {
     id: "PDRV-1042", hospitalId: "HSP01", requestType: "driver", status: "pending",
@@ -39,6 +83,8 @@ export const demoPendingDrivers = [
     approvedAt: null, resubmittedAt: null,
   },
 ];
+
+export const demoRejectedRequests = [];
 
 // Shape matches driversService.normalizeDriver() output, since live data
 // passes through that normalizer before reaching the UI.
@@ -104,8 +150,9 @@ export const demoEmergencies = [
 ];
 
 export const demoLiveLocations = [
-  { id: "AMB001", ambulanceId: "AMB001", driverUid: "DRV001", hospitalId: "HSP01", lat: 18.5204, lng: 73.8567, updatedAt: "2026-07-03T08:41:00+05:30" },
-  { id: "AMB002", ambulanceId: "AMB002", driverUid: "DRV002", hospitalId: "HSP02", lat: 12.9716, lng: 77.5946, updatedAt: "2026-07-03T08:41:30+05:30" },
+  { id: "AMB001", ambulanceId: "AMB001", driverUid: "DRV001", hospitalId: "HSP01", lat: 18.5204, lng: 73.8567, speed: 45, heading: 120, updatedAt: "2026-07-03T08:41:00+05:30" },
+  { id: "AMB002", ambulanceId: "AMB002", driverUid: "DRV002", hospitalId: "HSP02", lat: 12.9716, lng: 77.5946, speed: 52, heading: 90, updatedAt: "2026-07-03T08:41:30+05:30" },
+  { id: "AMB003", ambulanceId: "AMB003", driverUid: "DRV001", hospitalId: "HSP01", lat: 18.4579, lng: 73.8480, speed: 0, heading: 0, updatedAt: "2026-07-03T08:45:00+05:30" },
 ];
 
 export const demoNotifications = [
@@ -119,8 +166,12 @@ export const demoActivityLogs = [
 ];
 
 export const demoAnalytics = [
-  { id: "AN001", hospitalId: "HSP01", emergencyId: "EMG001", driverId: "DRV001", ambulanceId: "AMB001", responseTime: 8, totalDuration: 45, createdAt: "2026-07-02T09:00:00+05:30" },
-  { id: "AN002", hospitalId: "HSP02", emergencyId: "EMG002", driverId: "DRV002", ambulanceId: "AMB002", responseTime: 12, totalDuration: 38, createdAt: "2026-07-01T09:00:00+05:30" },
+  { id: "AN001", hospitalId: "HSP01", hospitalName: "Bharati Hospital", emergencyId: "EMG001", driverId: "DRV001", driverName: "Rahul Sharma", ambulanceId: "AMB001", responseTime: 8, totalDuration: 45, priority: "critical", incidentType: "Cardiac Arrest", createdAt: "2026-07-03T09:00:00+05:30" },
+  { id: "AN002", hospitalId: "HSP02", hospitalName: "Apollo Metro Care", emergencyId: "EMG002", driverId: "DRV002", driverName: "Maya Ortiz", ambulanceId: "AMB002", responseTime: 12, totalDuration: 38, priority: "high", incidentType: "Road Accident", createdAt: "2026-07-02T14:30:00+05:30" },
+  { id: "AN003", hospitalId: "HSP01", hospitalName: "Bharati Hospital", emergencyId: "EMG003", driverId: "DRV001", driverName: "Rahul Sharma", ambulanceId: "AMB001", responseTime: 6, totalDuration: 28, priority: "medium", incidentType: "Stroke", createdAt: "2026-07-01T11:20:00+05:30" },
+  { id: "AN004", hospitalId: "HSP03", hospitalName: "Central City Children", emergencyId: "EMG004", driverId: "DRV002", driverName: "Maya Ortiz", ambulanceId: "AMB002", responseTime: 15, totalDuration: 52, priority: "critical", incidentType: "Respiratory Distress", createdAt: "2026-06-30T16:15:00+05:30" },
+  { id: "AN005", hospitalId: "HSP02", hospitalName: "Apollo Metro Care", emergencyId: "EMG005", driverId: "DRV001", driverName: "Rahul Sharma", ambulanceId: "AMB001", responseTime: 9, totalDuration: 35, priority: "low", incidentType: "Minor Injury", createdAt: "2026-06-29T10:45:00+05:30" },
+  { id: "AN006", hospitalId: "HSP01", hospitalName: "Bharati Hospital", emergencyId: "EMG006", driverId: "DRV001", driverName: "Rahul Sharma", ambulanceId: "AMB001", responseTime: 7, totalDuration: 40, priority: "critical", incidentType: "Trauma", createdAt: "2026-06-28T08:15:00+05:30" },
 ];
 
 export const systemPanels = [

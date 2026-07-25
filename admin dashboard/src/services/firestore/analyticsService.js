@@ -14,3 +14,16 @@ export async function listenToAnalyticsByHospital(hospitalId, callback, onError)
     onError,
   });
 }
+
+export async function createAnalyticsRecord(record) {
+  return analytics.create(record);
+}
+
+export async function updateAnalyticsRecord(id, patch) {
+  return analytics.update(id, patch);
+}
+
+export async function removeAnalyticsRecord(id) {
+  return analytics.remove(id);
+}
+

@@ -2,6 +2,7 @@ import { createBrowserRouter, Navigate } from "react-router-dom";
 import AdminLayout from "../layouts/AdminLayout.jsx";
 import ActivityLogs from "../pages/ActivityLogs/ActivityLogs.jsx";
 import Ambulances from "../pages/Ambulances/Ambulances.jsx";
+import Analytics from "../pages/Analytics/Analytics.jsx";
 import Dashboard from "../pages/Dashboard/Dashboard.jsx";
 import Drivers from "../pages/Drivers/Drivers.jsx";
 import Emergencies from "../pages/Emergencies/Emergencies.jsx";
@@ -43,6 +44,7 @@ export const router = createBrowserRouter([
           { path: "ambulances", element: <Ambulances /> },
           { path: "live-tracking", element: <LiveTracking /> },
           { path: "emergencies", element: <Emergencies /> },
+          { path: "analytics", element: <Analytics /> },
           { path: "activity-logs", element: <ActivityLogs /> },
           { path: "settings", element: <Settings /> },
           { path: "*", element: <Navigate to="/admin/dashboard" replace /> },

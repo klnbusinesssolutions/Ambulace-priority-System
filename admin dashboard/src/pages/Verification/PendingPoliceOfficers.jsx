@@ -1,5 +1,5 @@
-import { useMemo, useState } from "react";
-import { ShieldCheck, XCircle, Loader2 } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { ShieldCheck, XCircle, Copy, Check, Loader2 } from "lucide-react";
 import DataTable from "../../components/ui/DataTable.jsx";
 import Input from "../../components/ui/Input.jsx";
 import Modal from "../../components/ui/Modal.jsx";
@@ -20,7 +20,9 @@ export default function PendingPoliceOfficers() {
   const [radiusKm, setRadiusKm] = useState("8");
   const [reason, setReason] = useState("");
   const [approving, setApproving] = useState(false);
-  const [approved, setApproved] = useState(false);
+  const [credential, setCredential] = useState(null);
+  const [copied, setCopied] = useState(false);
+  const unsubscribeCredentialRef = useRef(null);
 
   const rows = useMemo(
     () =>
@@ -30,10 +32,15 @@ export default function PendingPoliceOfficers() {
     [pendingPoliceOfficers, query],
   );
 
+  useEffect(() => {
+    return () => unsubscribeCredentialRef.current?.();
+  }, []);
+
   function openApproveModal(request) {
     setSelected(request);
     setApproving(false);
-    setApproved(false);
+    setCredential(null);
+    setCopied(false);
     setStationName(request.station?.name || "");
     setStationLat(request.station?.lat != null ? String(request.station.lat) : "");
     setStationLng(request.station?.lng != null ? String(request.station.lng) : "");
@@ -59,15 +66,36 @@ export default function PendingPoliceOfficers() {
       serviceRadiusKm: radiusKm.trim() ? Number(radiusKm) : 8,
     };
 
+    const requestId = selected.id;
     try {
-      await pendingPoliceOfficersActions.approve(selected, overrides);
-      setApproved(true);
+      const generatedCred = await pendingPoliceOfficersActions.approve(selected, overrides);
+      if (generatedCred) {
+        setCredential(generatedCred);
+      }
+
+      unsubscribeCredentialRef.current = await pendingPoliceOfficersActions.watchCredentials(
+        requestId,
+        (doc) => {
+          if (doc) setCredential(doc);
+        },
+      );
+    } catch (err) {
+      console.error("Failed to approve police officer:", err);
     } finally {
       setApproving(false);
     }
   }
 
+  function copyCredentials() {
+    if (!credential) return;
+    navigator.clipboard?.writeText(`Email: ${credential.email}\nTemporary password: ${credential.tempPassword}`);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  }
+
   function closeApproveModal() {
+    unsubscribeCredentialRef.current?.();
+    unsubscribeCredentialRef.current = null;
     setModal(null);
   }
 
@@ -80,7 +108,7 @@ export default function PendingPoliceOfficers() {
     <div className="space-y-5">
       <PageHeader
         title="Pending Police Officers"
-        description="Registration requests from the police dashboard (pending_police_officers). Officers set their own password at registration - approving just activates the account."
+        description="Registration requests from the police dashboard (pending_police_officers). Approving one creates the officer's login automatically."
       />
 
       <div className="rounded-lg border border-slate-200 bg-white p-4">
@@ -148,7 +176,7 @@ export default function PendingPoliceOfficers() {
         description={selected ? `${selected.name} · Badge ${selected.badgeId}` : ""}
         onClose={closeApproveModal}
         footer={
-          approved ? (
+          credential ? (
             <Button className="bg-emerald-600 hover:bg-emerald-700" onClick={closeApproveModal}>
               Done
             </Button>
@@ -163,25 +191,40 @@ export default function PendingPoliceOfficers() {
                     <Loader2 className="h-4 w-4 animate-spin" /> Approving...
                   </>
                 ) : (
-                  "Approve & activate account"
+                  "Approve & create login"
                 )}
               </Button>
             </>
           )
         }
       >
-        {approved ? (
+        {credential ? (
           <div className="space-y-3 text-sm">
             <p className="flex items-center gap-2 text-emerald-700">
-              <ShieldCheck className="h-4 w-4" /> Officer approved. They can now sign in to the police dashboard
-              with the badge ID/email and password they set when they registered.
+              <ShieldCheck className="h-4 w-4" /> Account created. Share these credentials with the officer securely
+              - they'll be asked to change the password on first login.
             </p>
+            <div className="space-y-2 rounded-lg border border-slate-200 bg-slate-50 p-3">
+              <div>
+                <p className="text-xs font-medium uppercase tracking-wide text-slate-500">Email</p>
+                <p className="font-medium text-slate-900">{credential.email}</p>
+              </div>
+              <div>
+                <p className="text-xs font-medium uppercase tracking-wide text-slate-500">Temporary password</p>
+                <p className="font-mono font-medium text-slate-900">{credential.tempPassword}</p>
+              </div>
+            </div>
+            <Button variant="secondary" onClick={copyCredentials} className="w-full">
+              {copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
+              {copied ? "Copied" : "Copy email + password"}
+            </Button>
           </div>
         ) : (
           <div className="space-y-3 text-sm">
             {approving && (
               <p className="flex items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-slate-600">
-                <Loader2 className="h-4 w-4 animate-spin" /> Approving...
+                <Loader2 className="h-4 w-4 animate-spin" /> Creating the account and generating a temporary
+                password - this usually takes a few seconds.
               </p>
             )}
             <div className="grid grid-cols-2 gap-3">

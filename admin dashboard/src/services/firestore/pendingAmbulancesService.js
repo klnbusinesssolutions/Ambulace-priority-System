@@ -1,14 +1,17 @@
-import { arrayUnion, doc, getFirestore, updateDoc } from "firebase/firestore";
+import { arrayUnion, doc, getFirestore, updateDoc, writeBatch } from "firebase/firestore";
 import { COLLECTIONS, VERIFICATION_STATUS } from "../../firebase/collections.js";
 import { createCollectionService, orderBy, serverTimestamp, where } from "./firestoreCollection.js";
 import { createActivityLog } from "./activityLogService.js";
 import { createNotification } from "./notificationsService.js";
 import { getCurrentAdmin } from "../auth/adminAuthService.js";
-import { getFirebaseApp } from "../../firebase/client.js";
+import { getFirebaseApp, hasFirebaseConfig } from "../../firebase/client.js";
 import { createAmbulance as createApprovedAmbulance } from "./ambulancesService.js";
 import { createRejectedRequest } from "./rejectedRequestsService.js";
+import { validateAmbulanceForm, formatMedicalCapabilities, validateRegistrationNumber } from "../../utils/ambulanceValidation.js";
 
 const pendingAmbulances = createCollectionService(COLLECTIONS.pendingAmbulances);
+
+
 
 /**
  * The schema only defines `pending_ambulances` — there is no separate
@@ -115,29 +118,71 @@ export async function rejectPendingAmbulance(ambulance, rejectionReason = "") {
 }
 export async function requestAmbulanceResubmission(ambulance, rejectionReason = "") {
   const admin = await getCurrentAdmin();
-  await pendingAmbulances.update(ambulance.id, {
+  const timestamp = serverTimestamp();
+
+  const resubmitData = {
+    ...ambulance,
+    requestType: "ambulance",
     status: VERIFICATION_STATUS.resubmissionRequired,
-    rejectionReason,
-  });
+    rejectionReason: rejectionReason || ambulance.rejectionReason || "",
+    resubmittedAt: null,
+    updatedAt: hasFirebaseConfig() ? timestamp : new Date().toISOString(),
+  };
 
-  await createNotification({
-    hospitalId: ambulance.hospitalId,
-    type: "resubmission_required",
-    title: "Ambulance Resubmission Requested",
-    message: `Resubmission requested for ambulance ${ambulance.numberPlate || ambulance.registrationNumber}`,
-  });
+  if (hasFirebaseConfig()) {
+    const app = await getFirebaseApp();
+    const db = getFirestore(app);
+    const batch = writeBatch(db);
 
-  await createActivityLog({
-    hospitalId: ambulance.hospitalId,
-    action: "ambulance_resubmission_requested",
-    performedBy: admin?.uid || "unknown",
-    targetId: ambulance.id,
-    details: `Resubmission requested for ambulance ${ambulance.numberPlate || ambulance.registrationNumber}: ${rejectionReason || "no reason given"}`,
-  });
+    const pendingRef = doc(db, COLLECTIONS.pendingAmbulances, ambulance.id);
+    const rejectedRef = doc(db, COLLECTIONS.rejectedRequests, ambulance.id);
+
+    batch.set(pendingRef, resubmitData);
+    batch.delete(rejectedRef);
+
+    await batch.commit();
+
+    try {
+      await createNotification({
+        hospitalId: ambulance.hospitalId,
+        type: "resubmission_required",
+        title: "Ambulance Resubmission Requested",
+        message: `Resubmission requested for ambulance ${ambulance.numberPlate || ambulance.registrationNumber}`,
+      });
+    } catch (err) {
+      console.error("Failed to create notification on resubmission request:", err);
+    }
+
+    try {
+      await createActivityLog({
+        hospitalId: ambulance.hospitalId,
+        action: "ambulance_resubmission_requested",
+        performedBy: admin?.uid || "unknown",
+        targetId: ambulance.id,
+        details: `Resubmission requested for ambulance ${
+          ambulance.numberPlate || ambulance.registrationNumber
+        }: ${rejectionReason || ambulance.rejectionReason || "no reason given"}`,
+      });
+    } catch (err) {
+      console.error("Failed to create activity log on resubmission request:", err);
+    }
+  }
+
+  return resubmitData;
 }
+
 
 /** Admin-added ambulance records are created pre-approved. */
 export async function createAmbulance(data) {
+  const registrationNumber = (data.registrationNumber || "").trim().toUpperCase();
+  const medicalCapabilities = formatMedicalCapabilities(data.medicalCapabilities);
+  const payload = { ...data, registrationNumber, medicalCapabilities };
+
+  const errors = validateAmbulanceForm(payload);
+  if (Object.keys(errors).length > 0) {
+    throw new Error(Object.values(errors)[0]);
+  }
+
   return pendingAmbulances.add({
     status: VERIFICATION_STATUS.approved,
     requestType: "ambulance",
@@ -145,17 +190,28 @@ export async function createAmbulance(data) {
     activeDriverId: null,
     submittedAt: serverTimestamp(),
     approvedAt: serverTimestamp(),
-    ...data,
+    ...payload,
   });
 }
 
 export async function updateAmbulance(id, patch) {
-  return pendingAmbulances.update(id, patch);
+  const updatedPatch = { ...patch };
+  if (updatedPatch.registrationNumber) {
+    updatedPatch.registrationNumber = updatedPatch.registrationNumber.trim().toUpperCase();
+    const regErr = validateRegistrationNumber(updatedPatch.registrationNumber);
+    if (regErr) throw new Error(regErr);
+  }
+  if (updatedPatch.medicalCapabilities) {
+    updatedPatch.medicalCapabilities = formatMedicalCapabilities(updatedPatch.medicalCapabilities);
+  }
+
+  return pendingAmbulances.update(id, updatedPatch);
 }
 
 export async function removeAmbulance(id) {
   return pendingAmbulances.remove(id);
 }
+
 
 export async function assignDriverToAmbulance(ambulanceId, driverId) {
   const app = await getFirebaseApp();
