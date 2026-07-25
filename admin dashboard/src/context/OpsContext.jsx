@@ -33,7 +33,6 @@ import {
   listenToPendingPoliceOfficers,
   approvePendingPoliceOfficer,
   rejectPendingPoliceOfficer,
-  listenToPoliceTempCredential,
 } from "../services/firestore/policeOfficersService.js";
 import {
   demoHospitals,
@@ -154,8 +153,6 @@ export function OpsProvider({ children }) {
   const pendingPoliceOfficersActions = {
     approve: (request, overrides) => approvePendingPoliceOfficer(request, overrides),
     reject: (request, reason) => rejectPendingPoliceOfficer(request, reason),
-    watchCredentials: (requestId, callback, onError) =>
-      listenToPoliceTempCredential(requestId, callback, onError),
   };
 
   

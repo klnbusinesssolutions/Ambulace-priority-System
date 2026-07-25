@@ -54,17 +54,22 @@ function toOperator(user) {
   };
 }
 
-// The Auth user object has no badge/station info - that lives on the
-// police_officers/{uid} Firestore doc, set manually when the officer is
-// onboarded (admin dashboard > Verification > Pending Police Officers).
-// This fetches it once after login and merges it into currentOperator.
+// The Auth user object has no badge/station/approval info - that lives on
+// the police_officers/{uid} Firestore doc. The officer sets their own
+// passcode at registration (Register.jsx), but the doc starts out with
+// status: "pending" / isActive: false until an admin approves the request
+// (admin dashboard > Verification > Pending Police Officers). This fetches
+// it once after login and merges it into currentOperator, and reports
+// whether the account is actually approved yet.
 async function hydrateOperatorStation(set, get, uid) {
   const profile = await getPoliceOfficerProfile(uid).catch((error) => {
     console.error("Failed to load officer profile:", error);
     return null;
   });
 
-  if (get().currentOperator?.uid !== uid) return; // logged out/changed before this resolved
+  if (get().currentOperator?.uid !== uid) return { approved: false, profile: null }; // logged out/changed before this resolved
+
+  const approved = Boolean(profile) && profile.status === "approved" && profile.isActive !== false;
 
   set((state) => ({
     currentOperator: state.currentOperator
@@ -74,9 +79,13 @@ async function hydrateOperatorStation(set, get, uid) {
           department: profile?.department ?? null,
           station: profile?.station ?? null,
           serviceRadiusKm: profile?.serviceRadiusKm ?? null,
+          approvalStatus: profile?.status ?? "pending",
         }
       : state.currentOperator,
+    accessApproved: approved,
   }));
+
+  return { approved, profile };
 }
 
 function setFirestoreConnection(set, value) {
@@ -117,6 +126,9 @@ export const usePoliceStore = create((set, get) => ({
   authReady: !isFirebaseConfigured,
   authError: null,
   currentOperator: null,
+  // Set once hydrateOperatorStation resolves the police_officers/{uid} doc.
+  // null = not checked yet, true = approved, false = pending/rejected/missing.
+  accessApproved: null,
   liveDataConnected: false,
   _authUnsubscribe: null,
   _unsubscribers: [],
@@ -144,9 +156,25 @@ export const usePoliceStore = create((set, get) => ({
           authReady: true,
           isAuthenticated: Boolean(user),
           currentOperator: toOperator(user),
+          accessApproved: user ? null : false,
           authError: null,
         });
-        if (user) hydrateOperatorStation(set, get, user.uid);
+
+        if (user) {
+          hydrateOperatorStation(set, get, user.uid).then(({ approved }) => {
+            if (!approved && get().currentOperator?.uid === user.uid) {
+              // Registered but not yet approved (or rejected) - don't leave
+              // them signed into a dashboard they can't use.
+              logoutFromFirebase();
+              set({
+                isAuthenticated: false,
+                currentOperator: null,
+                accessApproved: false,
+                authError: "Your registration is still awaiting admin approval.",
+              });
+            }
+          });
+        }
       },
       (error) => {
         console.error("Firebase auth listener failed:", error);
@@ -167,8 +195,21 @@ export const usePoliceStore = create((set, get) => ({
         isAuthenticated: true,
         authReady: true,
         currentOperator: toOperator(user),
+        accessApproved: null,
       });
-      hydrateOperatorStation(set, get, user.uid);
+
+      const { approved, profile } = await hydrateOperatorStation(set, get, user.uid);
+
+      if (!approved) {
+        await logoutFromFirebase();
+        const message =
+          profile?.status === "rejected"
+            ? "Your registration request was rejected. Contact your department admin."
+            : "Your registration is still awaiting admin approval.";
+        set({ isAuthenticated: false, currentOperator: null, accessApproved: false, authError: message });
+        throw new Error(message);
+      }
+
       return user;
     } catch (error) {
       set({ authError: error.message, isAuthenticated: false });

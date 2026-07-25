@@ -140,15 +140,17 @@ exports.createDriverCredentialsOnApproval = onDocumentUpdated(
 );
 
 /**
- * Same pattern as createDriverCredentialsOnApproval, for the police onboarding
- * flow: admin dashboard flips `pending_police_officers/{requestId}.status` to
- * "approved", this creates the real Auth account + `police_officers/{uid}`
- * profile doc, and drops a temp password the admin can relay to the officer.
+ * ⚠️ DISABLED / OBSOLETE as of the "officer sets their own password at
+ * registration" flow (Register.jsx now calls createUserWithEmailAndPassword
+ * directly). Approving a request is now a plain client-side Firestore
+ * update straight to `police_officers/{uid}` - see
+ * admin dashboard/src/services/firestore/policeOfficersService.js
+ * approvePendingPoliceOfficer(), which DELETES the pending doc rather than
+ * setting status: "approved" on it, so this trigger no longer fires in the
+ * new flow. Left commented out (rather than deleted) for reference/rollback
+ * - do not re-enable without also reverting the registration/approval code,
+ * or it will overwrite officers' self-chosen passwords with a random one.
  *
- * The temp-credential doc is keyed by requestId (not uid) so the admin
- * dashboard can start watching it the moment it clicks "Approve", before the
- * Auth user (and its uid) exists yet.
- */
 exports.createPoliceOfficerCredentialsOnApproval = onDocumentUpdated(
   'pending_police_officers/{requestId}',
   async (event) => {
@@ -261,3 +263,4 @@ exports.createPoliceOfficerCredentialsOnApproval = onDocumentUpdated(
     await batch.commit();
   }
 );
+*/

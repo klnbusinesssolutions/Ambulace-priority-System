@@ -1,10 +1,11 @@
 import {
+  createUserWithEmailAndPassword,
   onAuthStateChanged,
   sendPasswordResetEmail,
   signInWithEmailAndPassword,
   signOut,
 } from "firebase/auth";
-import { addDoc, collection, serverTimestamp } from "firebase/firestore";
+import { addDoc, collection, doc, serverTimestamp, setDoc } from "firebase/firestore";
 
 import { auth, firestore } from "@/firebase/config";
 import { FIRESTORE_COLLECTIONS, findUserByBadgeId } from "@/services/firebaseDataService";
@@ -45,19 +46,52 @@ export async function logoutFromFirebase() {
   await signOut(auth);
 }
 
-export async function requestPoliceAccess(formData) {
-  if (!firestore) {
-    throw new Error("Firestore is not configured. Add your VITE_FIREBASE_* values and restart the app.");
+// The officer sets their own passcode right here at registration. We create
+// the real Firebase Auth account immediately (so the badge ID / email +
+// password they chose will work later), but there's no approved
+// `police_officers/{uid}` profile yet - it's created below with
+// status: "pending", isActive: false, so ProtectedRoute/policeStore can show
+// a "waiting for approval" screen instead of the dashboard until an admin
+// approves it. No temporary/admin-generated password involved anymore.
+export async function requestPoliceAccess({ password, ...formData }) {
+  if (!auth || !firestore) {
+    throw new Error("Firebase is not configured. Add your VITE_FIREBASE_* values and restart the app.");
   }
 
-  const docRef = await addDoc(collection(firestore, FIRESTORE_COLLECTIONS.accessRequests), {
-    ...formData,
-    role: "police",
-    status: "pending",
-    requestedAt: serverTimestamp(),
-  });
+  if (!password || password.length < 8) {
+    throw new Error("Password must be at least 8 characters.");
+  }
 
-  return docRef.id;
+  const credentials = await createUserWithEmailAndPassword(auth, formData.email, password);
+  const uid = credentials.user.uid;
+
+  try {
+    const officerProfile = {
+      uid,
+      email: formData.email,
+      badgeId: formData.badgeId,
+      displayName: formData.name,
+      department: formData.department,
+      station: formData.station ?? null,
+      serviceRadiusKm: formData.serviceRadiusKm ?? 10,
+      role: "police",
+      status: "pending",
+      isActive: false,
+      requiresPasswordChange: false,
+      requestedAt: serverTimestamp(),
+    };
+
+    // police_officers/{uid} is the profile login/dashboard access checks;
+    // pending_police_officers is the admin dashboard's review queue.
+    await setDoc(doc(firestore, FIRESTORE_COLLECTIONS.users, uid), officerProfile);
+    await addDoc(collection(firestore, FIRESTORE_COLLECTIONS.accessRequests), officerProfile);
+  } finally {
+    // Don't leave them signed in to a not-yet-approved account - send them
+    // back to /login where they'll see the "pending approval" state.
+    await signOut(auth);
+  }
+
+  return uid;
 }
 
 export async function sendPolicePasswordReset(identifier) {

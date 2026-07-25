@@ -23,6 +23,8 @@ export function Register() {
     badgeId: "",
     email: "",
     department: "",
+    password: "",
+    confirmPassword: "",
   });
 
   const { isLoaded: mapsLoaded, loadError: mapsLoadError } = useJsApiLoader({
@@ -94,13 +96,24 @@ export function Register() {
       return;
     }
 
+    if (formData.password.length < 8) {
+      setFormError("Password must be at least 8 characters.");
+      return;
+    }
+
+    if (formData.password !== formData.confirmPassword) {
+      setFormError("Passwords do not match.");
+      return;
+    }
+
     setIsLoading(true);
     setFormMessage("");
     setFormError("");
 
     try {
+      const { confirmPassword, ...submission } = formData;
       await requestAccess({
-        ...formData,
+        ...submission,
         station: {
           name: selectedStation.name,
           address: selectedStation.address,
@@ -110,8 +123,8 @@ export function Register() {
         },
         serviceRadiusKm: DEFAULT_SERVICE_RADIUS_KM,
       });
-      setFormMessage("System access request submitted. Waiting for admin approval.");
-      setTimeout(() => navigate("/login"), 1200);
+      setFormMessage("Account created. You can log in with your badge ID/email and password once an admin approves your request.");
+      setTimeout(() => navigate("/login"), 1800);
     } catch (error) {
       setFormError(error.message || "Unable to submit access request.");
     } finally {
@@ -138,7 +151,7 @@ export function Register() {
             <div className="mb-8 text-center">
               <h1 className="text-2xl font-bold tracking-tight text-slate-950">Request Access</h1>
               <p className="mt-2 text-sm text-slate-500">
-                Submit your details for Police Command verification.
+                Set your login credentials now - your account activates once Police Command verifies your details.
               </p>
             </div>
 
@@ -173,6 +186,24 @@ export function Register() {
                 required
                 value={formData.department}
                 onChange={(e) => setFormData({ ...formData, department: e.target.value })}
+                className="h-12 border-slate-200 bg-slate-50 focus-visible:ring-emerald-500"
+              />
+              <Input
+                type="password"
+                placeholder="Set Password"
+                required
+                minLength={8}
+                value={formData.password}
+                onChange={(e) => setFormData({ ...formData, password: e.target.value })}
+                className="h-12 border-slate-200 bg-slate-50 focus-visible:ring-emerald-500"
+              />
+              <Input
+                type="password"
+                placeholder="Confirm Password"
+                required
+                minLength={8}
+                value={formData.confirmPassword}
+                onChange={(e) => setFormData({ ...formData, confirmPassword: e.target.value })}
                 className="h-12 border-slate-200 bg-slate-50 focus-visible:ring-emerald-500"
               />
               <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs">

@@ -1,4 +1,20 @@
 /**
+ * ⚠️ OBSOLETE as of the "set your own password at registration" flow.
+ *
+ * Officers now create their own Firebase Auth account (with their own
+ * password) directly from Register.jsx at registration time. Approving a
+ * request in the admin dashboard is now a plain Firestore update
+ * (police_officers/{uid}.status -> "approved") - see
+ * admin dashboard/src/services/firestore/policeOfficersService.js
+ * approvePendingPoliceOfficer(). There is no Auth account left to create
+ * here, and no temp password to generate or hand off.
+ *
+ * Kept only for reference / rollback. Do not run this against a database
+ * that's using the new flow - `pending_police_officers` docs no longer
+ * carry a `status: "approved"` state that needs processing this way, and
+ * running it would overwrite officers' own passwords with a random one.
+ *
+ * ---------------------------------------------------------------------
  * Standalone script: processes approved police officer requests.
  *
  * This does the SAME job as the `createPoliceOfficerCredentialsOnApproval`
