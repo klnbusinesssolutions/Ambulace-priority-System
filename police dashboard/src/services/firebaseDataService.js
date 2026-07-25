@@ -32,6 +32,11 @@ export const FIRESTORE_COLLECTIONS = {
   // tripAlertWatcher.js already watches for tripStatus. Joined onto emergencies in
   // emergencyEnrichment.js so cards/table/drawer/map can show driver contact info.
   drivers: "drivers",
+  // Vehicle records (number plate, model, capacity...) - keyed by ambulanceId.
+  // Joined onto emergencies (by emergency.ambulanceId) in emergencyEnrichment.js so
+  // cards/table/drawer can show the real registration/number plate instead of a
+  // raw driverId/ambulanceId string.
+  ambulances: "ambulances",
   // Live GPS pings written by the driver app as the ambulance moves. Joined onto the
   // matching emergency (by driverId, falling back to tripId) in emergencyEnrichment.js -
   // this is what actually drives the ambulance's live position on the map.
@@ -170,9 +175,18 @@ export function normalizeEmergencyRecord(raw) {
     severity,
     // Shows the hospital ID until a `hospitals` collection exists to resolve it to a name.
     destinationHospital: raw.destinationHospital ?? raw.hospitalId,
-    ambulanceNumber: raw.ambulanceNumber ?? raw.driverId,
+    ambulanceId: raw.ambulanceId ?? raw.vehicleId,
+    ambulanceNumber: raw.ambulanceNumber ?? raw.numberPlate,
+    patientName: raw.patientName ?? raw.patient?.name ?? raw.patientFullName,
+    patientPhone: raw.patientPhone ?? raw.phoneNumber ?? raw.patient?.phone ?? raw.patientNumber ?? raw.patientContact ?? raw.patientMobile,
+    driverName: raw.driverName ?? raw.driver?.name,
+    driverPhone: raw.driverPhone ?? raw.driver?.phone,
     coordinates,
     pickup: raw.pickup ?? coordinates,
+    // Human-readable pickup location, straight from the emergencies doc's `address`
+    // field - separate from `pickup`/`coordinates`, which are the lat/lng used for
+    // the map and distance calculations.
+    pickupAddress: raw.address ?? raw.pickupAddress,
     lastUpdated: raw.lastUpdated ?? raw.startTime,
     startedAt: raw.startedAt ?? raw.startTime,
   };

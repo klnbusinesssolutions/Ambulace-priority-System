@@ -139,6 +139,12 @@ export function MapContainer({ emergencies, hospitals, trafficReports = [] }) {
   const serviceRadiusKm = usePoliceStore((state) => state.currentOperator?.serviceRadiusKm ?? 10);
   const displayIds = useEmergencyDisplayIds();
 
+  const regeocodeHospitals = usePoliceStore((state) => state.regeocodeHospitals);
+
+  useEffect(() => {
+    if (isLoaded) regeocodeHospitals();
+  }, [isLoaded, regeocodeHospitals]);
+
   const activeEmergency = emergencies.find((emergency) => emergency.id === selectedEmergencyId) ?? emergencies[0];
   const [satelliteView, setSatelliteView] = useState(false);
   const [infoWindowId, setInfoWindowId] = useState(null);

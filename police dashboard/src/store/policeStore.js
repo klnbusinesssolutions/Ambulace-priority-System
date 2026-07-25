@@ -21,10 +21,16 @@ import {
   subscribeToDocument,
   updateAlertReadState,
 } from "@/services/firebaseDataService";
-import { enrichEmergencies, normalizeDriverRecord, normalizeLiveLocationRecord } from "@/services/emergencyEnrichment";
+import {
+  enrichEmergencies,
+  normalizeAmbulanceRecord,
+  normalizeDriverRecord,
+  normalizeLiveLocationRecord,
+} from "@/services/emergencyEnrichment";
 import { emptyAnalytics, emptySystemStatus, filterByStationArea, isLiveEmergency } from "@/services/policeConstants";
 import { subscribeToEmergencies } from "@/services/realtimeEmergencyService";
 import { startTripAlertWatcher } from "@/services/tripAlertWatcher";
+import { geocodeAddress } from "@/services/geocodingService";
 import { notifyNewEmergency, notifyTripAlert } from "@/services/notify";
 import { buildEmergencyDisplayIds } from "@/utils/emergencyId";
 import {
@@ -312,15 +318,59 @@ export const usePoliceStore = create((set, get) => ({
     let latestRawEmergencies = [];
     let latestDrivers = [];
     let latestLiveLocations = [];
+    let latestAmbulances = [];
     let hasSeenInitialEmergencies = false;
     let knownEmergencyIds = new Set();
+
+    // gpsSync/activeAmbulances/onlineUnits/serviceHealth used to sit and wait on a
+    // systemStatus/current doc that nothing in this project actually writes to, so
+    // the System Status card stayed stuck on "Waiting" forever. Instead, derive all
+    // of it straight from the collections we're already subscribed to - a driver
+    // counts as "online" if they've sent a GPS ping recently, GPS sync is "Synced"
+    // as soon as any live location has come in, etc.
+    const ONLINE_THRESHOLD_MS = 2 * 60 * 1000; // 2 minutes since last GPS ping
+
+    const recomputeSystemStatus = () => {
+      const now = Date.now();
+      const recentFromCollection = latestLiveLocations.filter((loc) => {
+        if (!loc.updatedAt) return false;
+        const updatedMs = new Date(loc.updatedAt).getTime();
+        return Number.isFinite(updatedMs) && now - updatedMs <= ONLINE_THRESHOLD_MS;
+      });
+      // The driver app writes GPS onto drivers/{id}.location, not into live_locations
+      // (see emergencyEnrichment.js findLiveLocation) - count those pings too, or
+      // gpsSync/onlineUnits will look empty even while drivers are actively on duty.
+      const recentFromDrivers = latestDrivers.filter((d) => {
+        const updatedAt = d.location?.updatedAt;
+        if (!updatedAt) return false;
+        const updatedMs = new Date(updatedAt).getTime();
+        return Number.isFinite(updatedMs) && now - updatedMs <= ONLINE_THRESHOLD_MS;
+      });
+      const onlineDriverIds = new Set([
+        ...recentFromCollection.map((loc) => loc.driverId).filter(Boolean),
+        ...recentFromDrivers.map((d) => d.id),
+      ]);
+      const hasAnyGpsData = latestLiveLocations.length > 0 || latestDrivers.some((d) => d.location);
+
+      set((state) => ({
+        systemStatus: {
+          ...state.systemStatus,
+          gpsSync: hasAnyGpsData ? "Synced" : "Waiting",
+          activeAmbulances: latestRawEmergencies.filter(isLiveEmergency).length,
+          onlineUnits: onlineDriverIds.size,
+          serviceHealth: state.liveDataConnected ? "Operational" : "Waiting",
+        },
+      }));
+    };
 
     const syncEmergencies = () => {
       const merged = enrichEmergencies(latestRawEmergencies, {
         drivers: latestDrivers,
         liveLocations: latestLiveLocations,
         hospitals: get().hospitals,
+        ambulances: latestAmbulances,
       });
+      recomputeSystemStatus();
 
       if (hasSeenInitialEmergencies) {
         const { currentOperator, cityWide } = get();
@@ -376,6 +426,17 @@ export const usePoliceStore = create((set, get) => ({
       handleError,
     );
 
+    const unsubAmbulances = subscribeToCollection(
+      FIRESTORE_COLLECTIONS.ambulances,
+      {},
+      (liveAmbulances) => {
+        latestAmbulances = liveAmbulances.map(normalizeAmbulanceRecord);
+        syncEmergencies();
+        handleConnected();
+      },
+      handleError,
+    );
+
     const unsubTraffic = subscribeToTrafficReports(
       (liveReports) => {
         set({ trafficReports: liveReports });
@@ -418,13 +479,33 @@ export const usePoliceStore = create((set, get) => ({
       handleError,
     );
 
+    const geocodeHospitals = (hospitalsToResolve) => {
+      hospitalsToResolve.forEach((hospital) => {
+        if (!hospital.address) return;
+        geocodeAddress(hospital.address).then((coordinates) => {
+          if (!coordinates) return;
+          set((state) => ({
+            hospitals: state.hospitals.map((h) =>
+              h.id === hospital.id ? { ...h, lat: coordinates.lat, lng: coordinates.lng } : h,
+            ),
+          }));
+          syncEmergencies();
+        });
+      });
+    };
+
     const unsubHospitals = subscribeToCollection(
       FIRESTORE_COLLECTIONS.hospitals,
       { orderField: "name", direction: "asc" },
       (liveHospitals) => {
+        // Show hospitals immediately with whatever coordinates the doc already has
+        // (if any), then resolve each one's real position from its `address` field
+        // and patch it in as each geocode call resolves - address is the source of
+        // truth for hospital location, not a possibly-stale lat/lng on the doc.
         set({ hospitals: liveHospitals });
         syncEmergencies();
         handleConnected();
+        geocodeHospitals(liveHospitals);
       },
       handleError,
     );
@@ -460,6 +541,7 @@ export const usePoliceStore = create((set, get) => ({
       unsubEmergencies,
       unsubDrivers,
       unsubLiveLocations,
+      unsubAmbulances,
       unsubTraffic,
       unsubAlerts,
       unsubActivity,
@@ -469,7 +551,7 @@ export const usePoliceStore = create((set, get) => ({
       unsubTripAlerts,
     ];
 
-    set({ _unsubscribers: unsubscribers });
+    set({ _unsubscribers: unsubscribers, _geocodeHospitals: geocodeHospitals });
 
     return () => {
       unsubscribers.forEach((unsubscribe) => unsubscribe());
@@ -498,6 +580,13 @@ export const usePoliceStore = create((set, get) => ({
   removeTrafficIncident: async (id) => {
     await deleteTrafficReport(id);
     set((state) => ({ trafficReports: state.trafficReports.filter((report) => report.id !== id) }));
+  },
+
+  // Call once the Google Maps script is confirmed loaded (see MapContainer.jsx) to
+  // retry geocoding any hospital whose `address` couldn't be resolved yet because
+  // the script wasn't ready when the hospitals collection first loaded.
+  regeocodeHospitals: () => {
+    get()._geocodeHospitals?.(get().hospitals);
   },
 
   getKpis: () => {

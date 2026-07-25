@@ -1,3 +1,4 @@
+import { useEffect, useMemo, useState } from "react";
 import {
   Ambulance,
   CalendarClock,
@@ -31,10 +32,65 @@ const TIMELINE_STAGES = [
   "Completed",
 ];
 
+// Maps the driver app's tripStatus taps (drivers/{driverId}.tripStatus, see
+// emergencyEnrichment.js + tripAlertWatcher.js) onto the police Trip Timeline stages,
+// so the timeline actually advances step by step with what the driver is doing
+// instead of jumping straight to "Heading Hospital" for every trip.
+const TRIP_STATUS_STAGE = {
+  going_to_patient: "Started",
+  reached_patient: "Reached Pickup",
+  patient_onboard: "Patient Picked",
+  near_hospital: "ETA Under 5 Minutes",
+  trip_completed: "Arrived Hospital",
+};
+
 function stageFor(emergency) {
+  const status = String(emergency.status ?? "").toLowerCase();
+  if (status === "completed" || status === "resolved") return "Completed";
+
+  const tripStage = TRIP_STATUS_STAGE[emergency.tripStatus];
+  if (tripStage) return tripStage;
+
+  // Fallback for trips whose ETA has already dropped under 5 minutes even though
+  // the driver hasn't tapped "Near Hospital" yet.
   const etaMinutes = parseInt(emergency.eta, 10);
   if (!Number.isNaN(etaMinutes) && etaMinutes <= 5) return "ETA Under 5 Minutes";
-  return emergency.timelineStage ?? "Heading Hospital";
+
+  if (status === "started" || status === "in_progress" || status === "accepted" || status === "en route") {
+    return "Started";
+  }
+  if (emergency.driverId) return "Driver Assigned";
+  return "Emergency Created";
+}
+
+// Once the driver taps "Near Hospital" (tripStatus = near_hospital), the police
+// dashboard has no live ETA feed from the driver app - just the one-time alert.
+// This counts the ETA down live from 5 minutes based on when that alert fired,
+// so "Estimated arrival" actually ticks down instead of sitting frozen.
+function useLiveEta(emergency) {
+  const priorityAlerts = usePoliceStore((state) => state.priorityAlerts);
+  const [now, setNow] = useState(() => Date.now());
+
+  useEffect(() => {
+    const interval = setInterval(() => setNow(Date.now()), 15000);
+    return () => clearInterval(interval);
+  }, []);
+
+  return useMemo(() => {
+    if (emergency.tripStatus !== "near_hospital") return emergency.eta;
+
+    const alert = priorityAlerts.find(
+      (a) => a.tripId === emergency.id && a.category === "ETA Below 5 Minutes",
+    );
+    if (!alert?.createdAt) return emergency.eta;
+
+    const firedAt = new Date(alert.createdAt).getTime();
+    if (!Number.isFinite(firedAt)) return emergency.eta;
+
+    const elapsedMinutes = Math.floor((now - firedAt) / 60000);
+    const remaining = Math.max(0, 5 - elapsedMinutes);
+    return remaining === 0 ? "Arriving now" : `${remaining} min`;
+  }, [emergency, priorityAlerts, now]);
 }
 
 function Timeline({ emergency }) {
@@ -87,6 +143,7 @@ export function DetailsDrawer() {
   const getSelectedEmergency = usePoliceStore((state) => state.getSelectedEmergency);
   const emergency = getSelectedEmergency();
   const displayIds = useEmergencyDisplayIds();
+  const liveEta = useLiveEta(emergency ?? {});
 
   if (!emergency) return null;
 
@@ -130,9 +187,10 @@ export function DetailsDrawer() {
               icon={MapPin}
               label="Pickup location"
               value={
-                emergency.pickup
+                emergency.pickupAddress ??
+                (emergency.pickup
                   ? `${formatCoordinate(emergency.pickup.lat)}, ${formatCoordinate(emergency.pickup.lng)}`
-                  : "--"
+                  : "--")
               }
             />
             <DetailRow
@@ -174,7 +232,7 @@ export function DetailsDrawer() {
               <div className="flex items-center justify-between rounded-lg bg-slate-50 p-3">
                 <div>
                   <p className="text-xs text-slate-500">Estimated arrival</p>
-                  <p className="text-xl font-semibold text-slate-950">{emergency.eta}</p>
+                  <p className="text-xl font-semibold text-slate-950">{liveEta}</p>
                 </div>
                 <Route className="h-5 w-5 text-slate-500" />
               </div>
