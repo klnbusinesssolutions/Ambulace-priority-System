@@ -1,11 +1,13 @@
 import { Ambulance, Clock, Hospital, MapPin } from "lucide-react";
 
 import { StatusBadge } from "@/components/police/StatusBadge";
+import { useEmergencyDisplayIds } from "@/hooks/useEmergencyDisplayIds";
 import { usePoliceStore } from "@/store/policeStore";
 import { formatRelativeTime } from "@/utils/format";
 
 export function EmergencyCard({ emergency }) {
   const selectEmergency = usePoliceStore((state) => state.selectEmergency);
+  const displayIds = useEmergencyDisplayIds();
 
   return (
     <button
@@ -14,8 +16,10 @@ export function EmergencyCard({ emergency }) {
     >
       <div className="flex items-start justify-between gap-3">
         <div>
-          <p className="text-sm font-semibold text-slate-950">{emergency.id}</p>
-          <p className="mt-1 text-xs text-slate-500">{emergency.type}</p>
+          <p className="text-sm font-semibold text-slate-950">{displayIds.get(emergency.id) ?? emergency.id}</p>
+          <p className="mt-1 text-xs text-slate-500">
+            {emergency.patientName ?? "Patient unknown"} · {emergency.type}
+          </p>
         </div>
         <StatusBadge value={emergency.severity} />
       </div>
@@ -28,6 +32,9 @@ export function EmergencyCard({ emergency }) {
         <span className="flex items-center gap-1.5">
           <Clock className="h-3.5 w-3.5" />
           ETA {emergency.eta}
+        </span>
+        <span className="col-span-2 truncate text-slate-500">
+          Driver: {emergency.driverName ?? "--"} {emergency.driverPhone ? `· ${emergency.driverPhone}` : ""}
         </span>
         <span className="col-span-2 flex items-center gap-1.5">
           <Hospital className="h-3.5 w-3.5" />

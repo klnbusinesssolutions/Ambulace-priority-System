@@ -28,6 +28,14 @@ export const FIRESTORE_COLLECTIONS = {
   priorityAlerts: "police_alerts",
   activityFeed: "activity_logs",
   hospitals: "hospitals",
+  // Driver profiles (name/phone/vehicle number) - keyed by driverId, same collection
+  // tripAlertWatcher.js already watches for tripStatus. Joined onto emergencies in
+  // emergencyEnrichment.js so cards/table/drawer/map can show driver contact info.
+  drivers: "drivers",
+  // Live GPS pings written by the driver app as the ambulance moves. Joined onto the
+  // matching emergency (by driverId, falling back to tripId) in emergencyEnrichment.js -
+  // this is what actually drives the ambulance's live position on the map.
+  liveLocations: "live_locations",
   // Police officers are a separate concept from the hospital/company `admins`
   // collection - their own Firebase Auth accounts, own Firestore collection.
   // "pending_police_officers" holds submitted Register-page requests before
@@ -112,12 +120,30 @@ export function mapSnapshotDoc(snapshotDoc) {
   };
 }
 
-// Your `emergencies` docs store location as a string like "23.0225° N, 72.5714° E"
-// instead of a { lat, lng } object. This turns that string into coordinates the map/UI can use.
+// `emergencies.location` can arrive in either of two real shapes depending on
+// which client wrote the doc:
+//   1. An object { latitude, longitude } - what the hospital dashboard's
+//      emergencyService.createEmergency() actually writes.
+//   2. A string like "23.0225° N, 72.5714° E".
+// Either way, everything downstream (MapContainer, filterByStationArea,
+// distanceKm) needs a plain { lat, lng } object - `.lat`/`.lng` specifically,
+// not `.latitude`/`.longitude`. Returning the raw object unchanged here (as a
+// previous version of this function did) left `coordinates.lat` undefined,
+// which silently dropped every emergency from the station-radius filter
+// (distanceKm treats a missing .lat as Infinity away) and broke the map.
 export function parseCoordinateString(value) {
   if (!value) return null;
   const raw = Array.isArray(value) ? value[0] : value;
-  if (typeof raw !== "string") return raw;
+
+  if (raw && typeof raw === "object") {
+    if (typeof raw.lat === "number" && typeof raw.lng === "number") return raw;
+    if (typeof raw.latitude === "number" && typeof raw.longitude === "number") {
+      return { lat: raw.latitude, lng: raw.longitude };
+    }
+    return null;
+  }
+
+  if (typeof raw !== "string") return null;
 
   const match = raw.match(/([\d.]+)\s*°?\s*([NS]).*?([\d.]+)\s*°?\s*([EW])/i);
   if (!match) return null;

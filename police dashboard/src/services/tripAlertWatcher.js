@@ -24,9 +24,14 @@ const TRIP_ALERT_RULES = {
   // computing minutes-to-arrival automatically (no live ETA is currently
   // written to Firestore by the driver app - see note in chat).
   near_hospital: {
-    title: "Ambulance approaching hospital",
+    title: "Ambulance approaching hospital - ETA under 5 mins",
     category: "ETA Below 5 Minutes",
     severity: "High",
+  },
+  trip_completed: {
+    title: "Ambulance reached hospital - trip completed",
+    category: "Trip Completed",
+    severity: "Low",
   },
 };
 

@@ -14,6 +14,7 @@ import {
 
 import { StatusBadge } from "@/components/police/StatusBadge";
 import { Button } from "@/components/ui/button";
+import { useEmergencyDisplayIds } from "@/hooks/useEmergencyDisplayIds";
 import { usePoliceStore } from "@/store/policeStore";
 import { cn } from "@/utils/cn";
 import { formatCoordinate, formatRelativeTime } from "@/utils/format";
@@ -85,6 +86,7 @@ export function DetailsDrawer() {
   const closeDrawer = usePoliceStore((state) => state.closeDrawer);
   const getSelectedEmergency = usePoliceStore((state) => state.getSelectedEmergency);
   const emergency = getSelectedEmergency();
+  const displayIds = useEmergencyDisplayIds();
 
   if (!emergency) return null;
 
@@ -104,7 +106,7 @@ export function DetailsDrawer() {
         <div className="flex items-start justify-between gap-4 border-b p-5">
           <div>
             <div className="flex flex-wrap items-center gap-2">
-              <h2 className="text-lg font-semibold text-slate-950">{emergency.id}</h2>
+              <h2 className="text-lg font-semibold text-slate-950">{displayIds.get(emergency.id) ?? emergency.id}</h2>
               <StatusBadge value={emergency.severity} />
             </div>
             <p className="mt-1 text-sm text-slate-500">
@@ -118,10 +120,21 @@ export function DetailsDrawer() {
 
         <div className="scrollbar-thin flex-1 overflow-y-auto p-5">
           <div className="grid gap-3 sm:grid-cols-2">
+            <DetailRow icon={UserRound} label="Patient" value={emergency.patientName} />
+            <DetailRow icon={Phone} label="Patient phone" value={emergency.patientPhone} />
             <DetailRow icon={UserRound} label="Driver" value={emergency.driverName} />
             <DetailRow icon={Phone} label="Driver phone" value={emergency.driverPhone} />
             <DetailRow icon={Ambulance} label="Ambulance" value={emergency.ambulanceNumber} />
             <DetailRow icon={Hospital} label="Destination hospital" value={emergency.destinationHospital} />
+            <DetailRow
+              icon={MapPin}
+              label="Pickup location"
+              value={
+                emergency.pickup
+                  ? `${formatCoordinate(emergency.pickup.lat)}, ${formatCoordinate(emergency.pickup.lng)}`
+                  : "--"
+              }
+            />
             <DetailRow
               icon={Gauge}
               label="Speed / heading"

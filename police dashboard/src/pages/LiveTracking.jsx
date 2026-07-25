@@ -17,17 +17,24 @@ export function LiveTracking() {
         <h1 className="mt-1 text-2xl font-semibold text-slate-950">Live Tracking</h1>
       </div>
 
-      <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_340px]">
+      <div className="flex flex-col gap-4">
         <MapContainer emergencies={emergencies} hospitals={hospitals} trafficReports={trafficReports} />
+
         <Card>
-          <CardHeader>
+          <CardHeader className="flex-row items-center justify-between">
             <CardTitle>Units On Map</CardTitle>
             <span className="text-xs text-slate-500">{emergencies.length} routes</span>
           </CardHeader>
-          <CardContent className="space-y-3">
-            {emergencies.map((emergency) => (
-              <EmergencyCard key={emergency.id} emergency={emergency} />
-            ))}
+          <CardContent>
+            {emergencies.length === 0 ? (
+              <p className="py-6 text-center text-sm text-slate-500">No active units to display right now.</p>
+            ) : (
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+                {emergencies.map((emergency) => (
+                  <EmergencyCard key={emergency.id} emergency={emergency} />
+                ))}
+              </div>
+            )}
           </CardContent>
         </Card>
       </div>

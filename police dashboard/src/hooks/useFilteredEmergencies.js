@@ -1,6 +1,6 @@
 import { useMemo } from "react";
 
-import { filterByStationArea } from "@/services/policeConstants";
+import { filterByStationArea, isLiveEmergency } from "@/services/policeConstants";
 import { usePoliceStore } from "@/store/policeStore";
 
 export function useFilteredEmergencies() {
@@ -11,8 +11,10 @@ export function useFilteredEmergencies() {
   const serviceRadiusKm = usePoliceStore((state) => state.currentOperator?.serviceRadiusKm);
 
   return useMemo(() => {
+    const live = emergencies.filter(isLiveEmergency);
+
     const inArea = filterByStationArea(
-      emergencies,
+      live,
       { station, radiusKm: serviceRadiusKm, cityWide },
       (emergency) => emergency.coordinates,
     );

@@ -21,9 +21,12 @@ import {
   subscribeToDocument,
   updateAlertReadState,
 } from "@/services/firebaseDataService";
-import { emptyAnalytics, emptySystemStatus } from "@/services/policeConstants";
+import { enrichEmergencies, normalizeDriverRecord, normalizeLiveLocationRecord } from "@/services/emergencyEnrichment";
+import { emptyAnalytics, emptySystemStatus, filterByStationArea, isLiveEmergency } from "@/services/policeConstants";
 import { subscribeToEmergencies } from "@/services/realtimeEmergencyService";
 import { startTripAlertWatcher } from "@/services/tripAlertWatcher";
+import { notifyNewEmergency, notifyTripAlert } from "@/services/notify";
+import { buildEmergencyDisplayIds } from "@/utils/emergencyId";
 import {
   createTrafficReport,
   deleteTrafficReport,
@@ -132,6 +135,15 @@ export const usePoliceStore = create((set, get) => ({
   liveDataConnected: false,
   _authUnsubscribe: null,
   _unsubscribers: [],
+  // True only for the duration of requestAccess() below. createUserWithEmailAndPassword
+  // auto-signs-in the freshly registered (not-yet-approved) account, which fires the
+  // onAuthStateChanged listener below. authService.requestPoliceAccess already owns
+  // that session end-to-end (writes the pending request, then signs out in its own
+  // `finally`) - if the listener also races in with hydrateOperatorStation + its own
+  // logoutFromFirebase() call, two concurrent signOut() calls on the same in-flight
+  // session can leave the register flow's promise chain hanging. This flag makes the
+  // listener stand down while registration is in progress.
+  _isRegistering: false,
 
   emergencyFilters: emptyEmergencyFilters,
   sortKey: "lastUpdated",
@@ -142,9 +154,9 @@ export const usePoliceStore = create((set, get) => ({
   alertFilters: { category: "All", severity: "All" },
   alertSearchQuery: "",
 
-  // When false (default), emergencies/hospitals are scoped to the signed-in
-  // officer's station + serviceRadiusKm. Toggle to see the whole city.
-  cityWide: false,
+  // Central command center by default: monitors every hospital/ambulance/emergency
+  // city-wide. Officers can still narrow to their own station's radius via this toggle.
+  cityWide: true,
   toggleCityWide: () => set((state) => ({ cityWide: !state.cityWide })),
 
   initializeAuth: () => {
@@ -160,7 +172,7 @@ export const usePoliceStore = create((set, get) => ({
           authError: null,
         });
 
-        if (user) {
+        if (user && !get()._isRegistering) {
           hydrateOperatorStation(set, get, user.uid).then(({ approved }) => {
             if (!approved && get().currentOperator?.uid === user.uid) {
               // Registered but not yet approved (or rejected) - don't leave
@@ -228,10 +240,18 @@ export const usePoliceStore = create((set, get) => ({
     });
   },
 
-  requestAccess: async (formData) => requestPoliceAccess(formData),
+  requestAccess: async (formData) => {
+    set({ _isRegistering: true });
+    try {
+      return await requestPoliceAccess(formData);
+    } finally {
+      set({ _isRegistering: false });
+    }
+  },
   resetPasscode: async (identifier) => sendPolicePasswordReset(identifier),
 
   selectEmergency: (id) => set({ selectedEmergencyId: id, drawerOpen: true }),
+  focusEmergency: (id) => set({ selectedEmergencyId: id }),
   closeDrawer: () => set({ drawerOpen: false }),
   toggleSidebar: () => set((state) => ({ sidebarCollapsed: !state.sidebarCollapsed })),
   setMobileSidebarOpen: (open) => set({ mobileSidebarOpen: open }),
@@ -284,15 +304,73 @@ export const usePoliceStore = create((set, get) => ({
     const handleError = createLiveDataErrorHandler(set);
     const handleConnected = () => setFirestoreConnection(set, "Connected");
 
+    // Emergencies, drivers, live GPS pings, and hospitals each arrive from independent
+    // Firestore listeners in whatever order they happen to resolve/update. Rather than
+    // trying to enrich once inside a single handler, every handler below just updates its
+    // own local snapshot and calls syncEmergencies(), which always re-joins from the
+    // latest of all four and writes the single merged list the whole UI reads.
+    let latestRawEmergencies = [];
+    let latestDrivers = [];
+    let latestLiveLocations = [];
+    let hasSeenInitialEmergencies = false;
+    let knownEmergencyIds = new Set();
+
+    const syncEmergencies = () => {
+      const merged = enrichEmergencies(latestRawEmergencies, {
+        drivers: latestDrivers,
+        liveLocations: latestLiveLocations,
+        hospitals: get().hospitals,
+      });
+
+      if (hasSeenInitialEmergencies) {
+        const { currentOperator, cityWide } = get();
+        const relevant = filterByStationArea(
+          merged.filter(isLiveEmergency),
+          { station: currentOperator?.station, radiusKm: currentOperator?.serviceRadiusKm, cityWide },
+          (emergency) => emergency.coordinates,
+        );
+        const displayIds = buildEmergencyDisplayIds(merged);
+        relevant
+          .filter((emergency) => !knownEmergencyIds.has(emergency.id))
+          .forEach((emergency) => notifyNewEmergency(emergency, displayIds.get(emergency.id)));
+      }
+      knownEmergencyIds = new Set(merged.map((emergency) => emergency.id));
+      hasSeenInitialEmergencies = true;
+
+      set((state) => ({
+        emergencies: merged,
+        selectedEmergencyId: merged.some((emergency) => emergency.id === state.selectedEmergencyId)
+          ? state.selectedEmergencyId
+          : merged[0]?.id ?? null,
+      }));
+    };
+
     const unsubEmergencies = subscribeToEmergencies(
       (liveEmergencies) => {
-        set((state) => ({
-          emergencies: liveEmergencies,
-          selectedEmergencyId:
-            liveEmergencies.some((emergency) => emergency.id === state.selectedEmergencyId)
-              ? state.selectedEmergencyId
-              : liveEmergencies[0]?.id ?? null,
-        }));
+        latestRawEmergencies = liveEmergencies;
+        syncEmergencies();
+        handleConnected();
+      },
+      handleError,
+    );
+
+    const unsubDrivers = subscribeToCollection(
+      FIRESTORE_COLLECTIONS.drivers,
+      {},
+      (liveDrivers) => {
+        latestDrivers = liveDrivers.map(normalizeDriverRecord);
+        syncEmergencies();
+        handleConnected();
+      },
+      handleError,
+    );
+
+    const unsubLiveLocations = subscribeToCollection(
+      FIRESTORE_COLLECTIONS.liveLocations,
+      {},
+      (liveLocationDocs) => {
+        latestLiveLocations = liveLocationDocs.map((raw) => normalizeLiveLocationRecord(raw, raw.id));
+        syncEmergencies();
         handleConnected();
       },
       handleError,
@@ -306,11 +384,24 @@ export const usePoliceStore = create((set, get) => ({
       handleError,
     );
 
+    let hasSeenInitialAlerts = false;
+    let knownAlertIds = new Set();
+
     const unsubAlerts = subscribeToCollection(
       FIRESTORE_COLLECTIONS.priorityAlerts,
       { orderField: "createdAt", direction: "desc" },
       (liveAlerts) => {
-        set({ priorityAlerts: liveAlerts.map(normalizeAlertRecord) });
+        const normalized = liveAlerts.map(normalizeAlertRecord);
+
+        if (hasSeenInitialAlerts) {
+          normalized
+            .filter((alert) => !knownAlertIds.has(alert.id))
+            .forEach((alert) => notifyTripAlert(alert));
+        }
+        knownAlertIds = new Set(normalized.map((alert) => alert.id));
+        hasSeenInitialAlerts = true;
+
+        set({ priorityAlerts: normalized });
         handleConnected();
       },
       handleError,
@@ -332,6 +423,7 @@ export const usePoliceStore = create((set, get) => ({
       { orderField: "name", direction: "asc" },
       (liveHospitals) => {
         set({ hospitals: liveHospitals });
+        syncEmergencies();
         handleConnected();
       },
       handleError,
@@ -366,6 +458,8 @@ export const usePoliceStore = create((set, get) => ({
 
     const unsubscribers = [
       unsubEmergencies,
+      unsubDrivers,
+      unsubLiveLocations,
       unsubTraffic,
       unsubAlerts,
       unsubActivity,

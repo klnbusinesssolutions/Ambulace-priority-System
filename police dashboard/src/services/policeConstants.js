@@ -59,6 +59,16 @@ export const emptyAnalytics = {
 
 export const DEFAULT_SERVICE_RADIUS_KM = 10;
 
+// A trip is "live" until it reaches one of these terminal states. Used to
+// keep the Active Emergencies queue and Live Tracking map limited to trips
+// that are actually still in progress - completed/resolved/rejected/cancelled
+// emergencies stay visible in the Activity Feed's full history, just not here.
+const TERMINAL_EMERGENCY_STATUSES = new Set(["completed", "resolved", "rejected", "cancelled"]);
+
+export function isLiveEmergency(emergency) {
+  return !TERMINAL_EMERGENCY_STATUSES.has(String(emergency?.status ?? "").toLowerCase());
+}
+
 // Keeps an officer scoped to their own police station's patrol area by
 // default; cityWide=true (the map/table toggle) bypasses this entirely.
 export function filterByStationArea(items, { station, radiusKm, cityWide }, getCoordinates) {

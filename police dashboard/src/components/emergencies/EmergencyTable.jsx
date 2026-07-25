@@ -3,13 +3,16 @@ import { ArrowDown, ArrowUp, ArrowUpDown } from "lucide-react";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { StatusBadge } from "@/components/police/StatusBadge";
+import { useEmergencyDisplayIds } from "@/hooks/useEmergencyDisplayIds";
 import { usePoliceStore } from "@/store/policeStore";
 import { cn } from "@/utils/cn";
 import { formatRelativeTime } from "@/utils/format";
 
 const columns = [
   { key: "id", label: "Emergency" },
+  { key: "patientName", label: "Patient" },
   { key: "driverName", label: "Driver" },
+  { key: "driverPhone", label: "Driver phone" },
   { key: "ambulanceNumber", label: "Ambulance" },
   { key: "severity", label: "Severity" },
   { key: "eta", label: "ETA" },
@@ -41,6 +44,7 @@ export function EmergencyTable({ emergencies }) {
   const sortKey = usePoliceStore((state) => state.sortKey);
   const sortDir = usePoliceStore((state) => state.sortDir);
   const setSort = usePoliceStore((state) => state.setSort);
+  const displayIds = useEmergencyDisplayIds();
 
   if (!emergencies.length) {
     return <EmptyState title="No active emergencies match your search" />;
@@ -64,11 +68,13 @@ export function EmergencyTable({ emergencies }) {
           >
             <TableCell>
               <div>
-                <p className="font-semibold text-slate-900">{emergency.id}</p>
+                <p className="font-semibold text-slate-900">{displayIds.get(emergency.id) ?? emergency.id}</p>
                 <p className="text-xs text-slate-500">{emergency.type}</p>
               </div>
             </TableCell>
+            <TableCell>{emergency.patientName ?? "--"}</TableCell>
             <TableCell>{emergency.driverName}</TableCell>
+            <TableCell>{emergency.driverPhone ?? "--"}</TableCell>
             <TableCell className="font-medium">{emergency.ambulanceNumber}</TableCell>
             <TableCell>
               <StatusBadge value={emergency.severity} />
