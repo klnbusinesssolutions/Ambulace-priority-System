@@ -86,7 +86,16 @@ export function startTripAlertWatcher(getActiveEmergencies) {
         createdAt: serverTimestamp(),
       });
 
-      await setDoc(doc(collection(firestore, FIRESTORE_COLLECTIONS.activityFeed)), {
+      // Deterministic id (mirrors alertId above) instead of an auto-generated
+      // one. If two officers have the dashboard open at once, both clients'
+      // `existing.exists()` check above can race and pass before either has
+      // written - previously that meant each one then wrote its own
+      // activity_logs doc with a random id, so the same event showed up
+      // twice (or more) in the Notifications panel. Writing to a fixed id
+      // means a second concurrent write just overwrites the same doc instead
+      // of creating a duplicate.
+      const activityId = `trip_${emergency.id}_${tripStatus}`;
+      await setDoc(doc(firestore, FIRESTORE_COLLECTIONS.activityFeed, activityId), {
         hospitalId: emergency.destinationHospital ?? null,
         action: `trip_${tripStatus}`,
         performedBy: driverId,

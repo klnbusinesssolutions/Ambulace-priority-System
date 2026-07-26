@@ -18,7 +18,13 @@ export function LiveTracking() {
       </div>
 
       <div className="flex flex-col gap-4">
-        <MapContainer emergencies={emergencies} hospitals={hospitals} trafficReports={trafficReports} />
+        <MapContainer
+          emergencies={emergencies}
+          hospitals={hospitals}
+          trafficReports={trafficReports}
+          showInfoPanel={false}
+          stageAwareMarkers
+        />
 
         <Card>
           <CardHeader className="flex-row items-center justify-between">

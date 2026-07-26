@@ -84,52 +84,85 @@ const PATIENT_ALREADY_ONBOARD_STATUSES = new Set(["patient_onboard", "near_hospi
 function useAmbulanceRoutes(emergencies, isLoaded) {
   const [routesById, setRoutesById] = useState({});
   const requestedRef = useRef(new Map()); // emergency id -> fingerprint of the last successful request
+  // Directions API calls are async and can resolve after their emergency has
+  // already gone terminal (completed/cancelled) and dropped out of the
+  // `emergencies` prop - without this check, a late-arriving response for a
+  // finished trip would write its route back into state via the stale
+  // closure below, and nothing would ever clear it again since the cleanup
+  // effect only re-runs when `emergencies` changes. This ref always reflects
+  // the current active set so that callback can check it at resolve-time,
+  // not at request-time.
+  const activeIdsRef = useRef(new Set());
 
   useEffect(() => {
+    const activeIds = new Set(emergencies.map((emergency) => emergency.id));
+    activeIdsRef.current = activeIds;
+
+    // Drop cached routes (and their request fingerprints) for emergencies
+    // that are no longer active - this is what actually erases a completed
+    // or cancelled trip's polyline/DirectionsRenderer from the map, and
+    // also guarantees a since-restarted emergency with the same id (rare,
+    // but possible) recomputes its route from scratch instead of reusing a
+    // stale one.
+    for (const id of requestedRef.current.keys()) {
+      if (!activeIds.has(id)) requestedRef.current.delete(id);
+    }
+    setRoutesById((prev) => {
+      const next = Object.fromEntries(Object.entries(prev).filter(([id]) => activeIds.has(id)));
+      return Object.keys(next).length === Object.keys(prev).length ? prev : next;
+    });
+
     if (!isLoaded || !window.google?.maps) return;
     const directionsService = new window.google.maps.DirectionsService();
 
     emergencies.forEach((emergency) => {
       const origin = roundCoord(emergency.coordinates);
-      const destination = roundCoord(emergency.destinationHospitalCoordinates);
-      if (!origin || !destination) return;
-
       const patientOnboard = PATIENT_ALREADY_ONBOARD_STATUSES.has(emergency.tripStatus);
-      const pickup = patientOnboard ? null : roundCoord(emergency.pickup);
-      const includePickup = pickup && !sameCoord(pickup, origin) && !sameCoord(pickup, destination);
-      const waypoints = includePickup ? [{ location: pickup, stopover: true }] : [];
+      // Real navigation behavior: before pickup the only relevant destination
+      // is the patient; the hospital doesn't come into it yet. Once the
+      // patient is onboard, the route switches entirely to the hospital -
+      // never both at once, and never the hospital before pickup.
+      const destination = patientOnboard
+        ? roundCoord(emergency.destinationHospitalCoordinates)
+        : roundCoord(emergency.pickup);
+      if (!origin || !destination || sameCoord(origin, destination)) return;
 
-      const fingerprint = JSON.stringify({ origin, destination, pickup: includePickup ? pickup : null });
+      const fingerprint = JSON.stringify({ origin, destination, stage: patientOnboard ? "to_hospital" : "to_patient" });
       if (requestedRef.current.get(emergency.id) === fingerprint) return;
 
       directionsService.route(
         {
           origin,
           destination,
-          waypoints,
           travelMode: window.google.maps.TravelMode.DRIVING,
         },
         (result, status) => {
-          if (status === "OK" && result) {
+          // The trip may have completed/been cancelled while this request
+          // was in flight - if so, drop the result instead of resurrecting
+          // a route for a no-longer-active emergency.
+          if (status === "OK" && result && activeIdsRef.current.has(emergency.id)) {
             requestedRef.current.set(emergency.id, fingerprint);
             setRoutesById((prev) => ({ ...prev, [emergency.id]: result }));
           }
         },
       );
     });
-
-    // Drop cached routes for emergencies that are no longer active.
-    const activeIds = new Set(emergencies.map((emergency) => emergency.id));
-    setRoutesById((prev) => {
-      const next = Object.fromEntries(Object.entries(prev).filter(([id]) => activeIds.has(id)));
-      return Object.keys(next).length === Object.keys(prev).length ? prev : next;
-    });
   }, [emergencies, isLoaded]);
+
+  // Belt-and-suspenders: if this component/map is ever torn down entirely,
+  // make sure nothing is left referencing routes past its lifetime.
+  useEffect(() => () => setRoutesById({}), []);
 
   return routesById;
 }
 
-export function MapContainer({ emergencies, hospitals, trafficReports = [] }) {
+export function MapContainer({
+  emergencies,
+  hospitals,
+  trafficReports = [],
+  showInfoPanel = true,
+  stageAwareMarkers = false,
+}) {
   const { isLoaded, loadError } = useJsApiLoader({
     id: GOOGLE_MAPS_LOADER_ID,
     googleMapsApiKey: import.meta.env.VITE_GOOGLE_MAPS_API_KEY,
@@ -318,11 +351,8 @@ export function MapContainer({ emergencies, hospitals, trafficReports = [] }) {
           // Route not back from the Directions API yet (or it failed) - show a straight
           // line so the ambulance's intended path is never blank while that resolves.
           const patientOnboard = PATIENT_ALREADY_ONBOARD_STATUSES.has(emergency.tripStatus);
-          const fallbackPath = [
-            emergency.coordinates,
-            patientOnboard ? null : emergency.pickup,
-            emergency.destinationHospitalCoordinates,
-          ].filter(Boolean);
+          const fallbackDestination = patientOnboard ? emergency.destinationHospitalCoordinates : emergency.pickup;
+          const fallbackPath = [emergency.coordinates, fallbackDestination].filter(Boolean);
           return fallbackPath.length > 1 ? (
             <Polyline
               key={`${emergency.id}-route-fallback`}
@@ -337,7 +367,17 @@ export function MapContainer({ emergencies, hospitals, trafficReports = [] }) {
           ) : null;
         })}
 
-        {hospitals
+        {(stageAwareMarkers
+          ? emergencies
+              .filter((emergency) => PATIENT_ALREADY_ONBOARD_STATUSES.has(emergency.tripStatus))
+              .map((emergency) => ({
+                id: emergency.destinationHospital ?? emergency.id,
+                name: emergency.destinationHospital ?? "Assigned hospital",
+                lat: emergency.destinationHospitalCoordinates?.lat,
+                lng: emergency.destinationHospitalCoordinates?.lng,
+              }))
+          : hospitals
+        )
           .filter((hospital) => hospital.lat && hospital.lng)
           .map((hospital) => (
             <Marker
@@ -354,6 +394,25 @@ export function MapContainer({ emergencies, hospitals, trafficReports = [] }) {
               title={hospital.name}
             />
           ))}
+
+        {stageAwareMarkers &&
+          emergencies
+            .filter((emergency) => !PATIENT_ALREADY_ONBOARD_STATUSES.has(emergency.tripStatus) && emergency.pickup)
+            .map((emergency) => (
+              <Marker
+                key={`${emergency.id}-patient`}
+                position={emergency.pickup}
+                icon={{
+                  path: window.google.maps.SymbolPath.CIRCLE,
+                  scale: 8,
+                  fillColor: "#db2777",
+                  fillOpacity: 1,
+                  strokeColor: "#fff",
+                  strokeWeight: 2,
+                }}
+                title={`${emergency.patientName ?? "Patient"} · pickup location`}
+              />
+            ))}
 
         {emergencies
           .filter((emergency) => emergency.coordinates)
@@ -484,44 +543,46 @@ export function MapContainer({ emergencies, hospitals, trafficReports = [] }) {
         </Button>
       </div>
 
-      <div className="absolute bottom-4 left-4 right-4 z-10 grid gap-2 rounded-lg border bg-white/95 p-3 shadow-panel sm:grid-cols-3 lg:grid-cols-6">
-        <div>
-          <p className="text-xs text-slate-500">Active route</p>
-          <p className="truncate text-sm font-semibold text-slate-950">
-            {activeEmergency?.id} · {activeEmergency?.type}
-          </p>
+      {showInfoPanel && (
+        <div className="absolute bottom-4 left-4 right-4 z-10 grid gap-2 rounded-lg border bg-white/95 p-3 shadow-panel sm:grid-cols-3 lg:grid-cols-6">
+          <div>
+            <p className="text-xs text-slate-500">Active route</p>
+            <p className="truncate text-sm font-semibold text-slate-950">
+              {activeEmergency?.id} · {activeEmergency?.type}
+            </p>
+          </div>
+          <div>
+            <p className="text-xs text-slate-500">Destination</p>
+            <p className="truncate text-sm font-semibold text-slate-950">{activeEmergency?.destinationHospital}</p>
+          </div>
+          <div>
+            <p className="flex items-center gap-1 text-xs text-slate-500">
+              <Ambulance className="h-3 w-3" /> Speed
+            </p>
+            <p className="truncate text-sm font-semibold text-slate-950">{activeEmergency?.speed ?? "--"} km/h</p>
+          </div>
+          <div>
+            <p className="text-xs text-slate-500">Distance / Current road</p>
+            <p className="truncate text-sm font-semibold text-slate-950">
+              {activeEmergency?.distanceRemaining ?? "--"} km · {activeEmergency?.currentRoad ?? "Unknown"}
+            </p>
+          </div>
+          <div>
+            <p className="text-xs text-slate-500">Last updated</p>
+            <p className="truncate text-sm font-semibold text-slate-950">
+              {activeEmergency ? formatRelativeTime(activeEmergency.lastUpdated) : "--"}
+            </p>
+          </div>
+          <div>
+            <p className="text-xs text-slate-500">Status</p>
+            {isStationary ? (
+              <Badge variant="critical">Stationary warning</Badge>
+            ) : (
+              <Badge variant="success">Moving</Badge>
+            )}
+          </div>
         </div>
-        <div>
-          <p className="text-xs text-slate-500">Destination</p>
-          <p className="truncate text-sm font-semibold text-slate-950">{activeEmergency?.destinationHospital}</p>
-        </div>
-        <div>
-          <p className="flex items-center gap-1 text-xs text-slate-500">
-            <Ambulance className="h-3 w-3" /> Speed
-          </p>
-          <p className="truncate text-sm font-semibold text-slate-950">{activeEmergency?.speed ?? "--"} km/h</p>
-        </div>
-        <div>
-          <p className="text-xs text-slate-500">Distance / Current road</p>
-          <p className="truncate text-sm font-semibold text-slate-950">
-            {activeEmergency?.distanceRemaining ?? "--"} km · {activeEmergency?.currentRoad ?? "Unknown"}
-          </p>
-        </div>
-        <div>
-          <p className="text-xs text-slate-500">Last updated</p>
-          <p className="truncate text-sm font-semibold text-slate-950">
-            {activeEmergency ? formatRelativeTime(activeEmergency.lastUpdated) : "--"}
-          </p>
-        </div>
-        <div>
-          <p className="text-xs text-slate-500">Status</p>
-          {isStationary ? (
-            <Badge variant="critical">Stationary warning</Badge>
-          ) : (
-            <Badge variant="success">Moving</Badge>
-          )}
-        </div>
-      </div>
+      )}
     </section>
   );
 }

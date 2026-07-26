@@ -31,6 +31,13 @@ function playChime() {
 export function notifyNewEmergency(emergency, displayId) {
   const label = displayId ?? emergency.id;
   toast.error(`New emergency · ${label}`, {
+    // Stable id keyed to the emergency itself - if this ever gets triggered
+    // more than once for the same event (e.g. a snapshot re-firing, or a
+    // stray second listener), sonner replaces the existing toast instead of
+    // stacking a duplicate one. This is the single source of truth for
+    // "one notification per event", independent of whatever upstream code
+    // calls this function.
+    id: `emergency-${emergency.id}`,
     description: [emergency.type ?? "Ambulance", emergency.severity ?? "", emergency.currentRoad]
       .filter(Boolean)
       .join(" · "),
@@ -43,6 +50,8 @@ export function notifyTripAlert(alert) {
   const variant = alert.severity === "High" || alert.severity === "Critical" ? "warning" : "info";
   const toastFn = variant === "warning" ? toast.warning : toast.info;
   toastFn(alert.title ?? "Trip update", {
+    // Same dedup strategy as notifyNewEmergency - keyed to the alert's own id.
+    id: `trip-alert-${alert.id}`,
     description: alert.description,
     duration: 6000,
   });

@@ -47,6 +47,39 @@ import {
   updateTrafficReport,
 } from "@/services/trafficService";
 
+// Notifications panel read-state is per-operator, client-side UI state (see
+// notes on `readNotificationIds`/`getNotifications` below) - it isn't its own
+// Firestore collection, so it's persisted to localStorage instead. This is
+// what makes "Mark all as read" stick: without it, a page refresh reset the
+// in-memory Set and every past notification would look unread again.
+const NOTIFICATIONS_CLEARED_AT_KEY = "policeDashboard.notificationsClearedAt";
+const NOTIFICATIONS_READ_IDS_KEY = "policeDashboard.readNotificationIds";
+
+function loadNotificationsClearedAt() {
+  try {
+    return localStorage.getItem(NOTIFICATIONS_CLEARED_AT_KEY) || null;
+  } catch {
+    return null;
+  }
+}
+
+function loadReadNotificationIds() {
+  try {
+    const raw = localStorage.getItem(NOTIFICATIONS_READ_IDS_KEY);
+    return raw ? new Set(JSON.parse(raw)) : new Set();
+  } catch {
+    return new Set();
+  }
+}
+
+function persistReadNotificationIds(ids) {
+  try {
+    localStorage.setItem(NOTIFICATIONS_READ_IDS_KEY, JSON.stringify(Array.from(ids)));
+  } catch {
+    // Storage can fail (private browsing, quota) - never let it break the UI.
+  }
+}
+
 const emptyEmergencyFilters = {
   severity: "All",
   hospital: "All",
@@ -134,7 +167,12 @@ export const usePoliceStore = create((set, get) => ({
   // Local read-state for the Notifications panel (derived from activityFeed).
   // Not a separate Firestore collection - activity_logs is already the
   // durable history; this Set just tracks what this operator has seen.
-  readNotificationIds: new Set(),
+  readNotificationIds: loadReadNotificationIds(),
+  // Timestamp (ISO string) of the last "Mark all as read" click. Anything in
+  // activityFeed at or before this moment is treated as cleared and dropped
+  // from getNotifications()'s result entirely - a new trip event after this
+  // point still shows up as unread normally.
+  notificationsClearedAt: loadNotificationsClearedAt(),
   activityFeed: [],
   systemStatus: {
     ...emptySystemStatus,
@@ -708,7 +746,17 @@ export const usePoliceStore = create((set, get) => ({
   // arrival, completed - see tripAlertWatcher.js and hospital app writers).
   getNotifications: () => {
     const state = get();
+    const clearedAtMs = state.notificationsClearedAt ? new Date(state.notificationsClearedAt).getTime() : null;
+
     return [...state.activityFeed]
+      .filter((item) => {
+        if (!clearedAtMs) return true;
+        const itemMs = new Date(item.timestamp ?? 0).getTime();
+        // Anything that existed at/before the last "Mark all as read" click
+        // stays cleared out of the panel. Only a genuinely new event -
+        // timestamped after that click - reappears.
+        return Number.isFinite(itemMs) && itemMs > clearedAtMs;
+      })
       .map((item) => ({
         id: item.id,
         title: item.title,
@@ -722,12 +770,19 @@ export const usePoliceStore = create((set, get) => ({
   },
 
   markNotificationRead: (id) =>
-    set((state) => ({ readNotificationIds: new Set(state.readNotificationIds).add(id) })),
-
-  markAllNotificationsRead: () =>
     set((state) => {
-      const ids = new Set(state.readNotificationIds);
-      state.activityFeed.forEach((item) => ids.add(item.id));
+      const ids = new Set(state.readNotificationIds).add(id);
+      persistReadNotificationIds(ids);
       return { readNotificationIds: ids };
     }),
+
+  markAllNotificationsRead: () => {
+    const clearedAt = new Date().toISOString();
+    try {
+      localStorage.setItem(NOTIFICATIONS_CLEARED_AT_KEY, clearedAt);
+    } catch {
+      // Storage can fail (private browsing, quota) - the in-memory value below still works for this session.
+    }
+    set({ notificationsClearedAt: clearedAt });
+  },
 }));
