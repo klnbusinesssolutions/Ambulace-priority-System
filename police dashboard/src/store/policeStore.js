@@ -27,7 +27,14 @@ import {
   normalizeDriverRecord,
   normalizeLiveLocationRecord,
 } from "@/services/emergencyEnrichment";
-import { emptyAnalytics, emptySystemStatus, filterByStationArea, isLiveEmergency } from "@/services/policeConstants";
+import {
+  emptyAnalytics,
+  emptySystemStatus,
+  filterByStationArea,
+  isLiveEmergency,
+  isAmbulanceEnRoute,
+  getEmergencyStage,
+} from "@/services/policeConstants";
 import { subscribeToEmergencies } from "@/services/realtimeEmergencyService";
 import { startTripAlertWatcher } from "@/services/tripAlertWatcher";
 import { geocodeAddress } from "@/services/geocodingService";
@@ -119,6 +126,15 @@ export const usePoliceStore = create((set, get) => ({
   emergencies: [],
   hospitals: [],
   priorityAlerts: [],
+  // Client-derived "ambulance hasn't moved in 5+ minutes" alerts (see
+  // recomputeStationaryAlerts() below) - feeds the "5 Minute Alerts" KPI and
+  // the Alerts panel's "Ambulance Not Moving" entries. Not persisted to
+  // Firestore: it clears itself the moment the ambulance moves again.
+  stationaryAlerts: [],
+  // Local read-state for the Notifications panel (derived from activityFeed).
+  // Not a separate Firestore collection - activity_logs is already the
+  // durable history; this Set just tracks what this operator has seen.
+  readNotificationIds: new Set(),
   activityFeed: [],
   systemStatus: {
     ...emptySystemStatus,
@@ -322,6 +338,64 @@ export const usePoliceStore = create((set, get) => ({
     let hasSeenInitialEmergencies = false;
     let knownEmergencyIds = new Set();
 
+    // ambulanceId/driverId -> { lat, lng, since } for every ambulance on an
+    // active trip. If its coordinates are still identical 5+ minutes after
+    // `since`, it surfaces as a "5 Minute Alert" (possible breakdown/traffic
+    // block) - see KPI card #4 / Alerts button "Ambulance Not Moving".
+    const positionHistory = new Map();
+    const FIVE_MINUTES_MS = 5 * 60 * 1000;
+    const COORD_EPSILON = 0.00005; // ~5m, to ignore GPS jitter while parked
+
+    const recomputeStationaryAlerts = (mergedEmergencies) => {
+      const now = Date.now();
+      const seenKeys = new Set();
+      const alerts = [];
+
+      mergedEmergencies.filter(isLiveEmergency).forEach((emergency) => {
+        if (!emergency.driverId && !emergency.ambulanceId) return;
+        const key = emergency.ambulanceId ?? emergency.driverId;
+        const coords = emergency.coordinates;
+        seenKeys.add(key);
+
+        if (!coords || typeof coords.lat !== "number" || typeof coords.lng !== "number") {
+          positionHistory.delete(key);
+          return;
+        }
+
+        const previous = positionHistory.get(key);
+        const unchanged =
+          previous &&
+          Math.abs(previous.lat - coords.lat) < COORD_EPSILON &&
+          Math.abs(previous.lng - coords.lng) < COORD_EPSILON;
+
+        if (unchanged) {
+          const stationaryMs = now - previous.since;
+          if (stationaryMs >= FIVE_MINUTES_MS) {
+            alerts.push({
+              id: `stationary_${key}`,
+              type: "Ambulance Not Moving",
+              category: "Ambulance Stopped",
+              severity: "High",
+              ambulanceNumber: emergency.ambulanceNumber,
+              driverName: emergency.driverName,
+              tripId: emergency.id,
+              minutesStationary: Math.floor(stationaryMs / 60000),
+              read: false,
+            });
+          }
+        } else {
+          positionHistory.set(key, { lat: coords.lat, lng: coords.lng, since: now });
+        }
+      });
+
+      // Drop tracking for ambulances no longer on an active trip.
+      Array.from(positionHistory.keys())
+        .filter((key) => !seenKeys.has(key))
+        .forEach((key) => positionHistory.delete(key));
+
+      set({ stationaryAlerts: alerts });
+    };
+
     // gpsSync/activeAmbulances/onlineUnits/serviceHealth used to sit and wait on a
     // systemStatus/current doc that nothing in this project actually writes to, so
     // the System Status card stayed stuck on "Waiting" forever. Instead, derive all
@@ -371,6 +445,7 @@ export const usePoliceStore = create((set, get) => ({
         ambulances: latestAmbulances,
       });
       recomputeSystemStatus();
+      recomputeStationaryAlerts(merged);
 
       if (hasSeenInitialEmergencies) {
         const { currentOperator, cityWide } = get();
@@ -591,10 +666,12 @@ export const usePoliceStore = create((set, get) => ({
 
   getKpis: () => {
     const state = get();
-    const activeEmergencies = state.emergencies.length;
-    const ambulancesEnRoute = state.emergencies.filter((e) => e.status === "En route").length;
+    const liveEmergencies = state.emergencies.filter(isLiveEmergency);
+    const activeEmergencies = liveEmergencies.length;
+    const ambulancesEnRoute = liveEmergencies.filter(isAmbulanceEnRoute).length;
 
-    const etaValues = state.emergencies
+    // Average ETA across live emergencies only - ignores completed/cancelled trips.
+    const etaValues = liveEmergencies
       .map((e) => parseInt(e.eta, 10))
       .filter((value) => !Number.isNaN(value));
     const averageEta = etaValues.length
@@ -602,15 +679,55 @@ export const usePoliceStore = create((set, get) => ({
       : 0;
 
     const trafficAlerts = state.trafficReports.filter((report) => report.status !== "Resolved").length;
-    const fiveMinAlerts = state.emergencies.filter((e) => parseInt(e.eta, 10) <= 5).length;
+
+    // Trips completed *today* only - naturally rolls back to 0 at midnight
+    // since it re-derives from each emergency's own lastUpdated timestamp
+    // rather than a running counter.
+    const today = new Date().toDateString();
+    const completedTripsToday = state.emergencies.filter((emergency) => {
+      if (getEmergencyStage(emergency) !== "completed") return false;
+      const completedAt = emergency.lastUpdated ?? emergency.startedAt;
+      if (!completedAt) return false;
+      const completedDate = new Date(completedAt);
+      return !Number.isNaN(completedDate.getTime()) && completedDate.toDateString() === today;
+    }).length;
 
     return {
       activeEmergencies,
       ambulancesEnRoute,
       averageEta,
       trafficAlerts,
-      fiveMinAlerts,
-      completedTripsToday: state.analytics.completedTripsToday ?? state.analytics.tripsToday ?? 0,
+      fiveMinAlerts: state.stationaryAlerts.length,
+      completedTripsToday,
     };
   },
+
+  // Notifications panel: derives a unified, most-recent-first event timeline
+  // from activityFeed (activity_logs) - which already has full trip-milestone
+  // history (emergency created, assigned, en route, arrived, onboard, hospital
+  // arrival, completed - see tripAlertWatcher.js and hospital app writers).
+  getNotifications: () => {
+    const state = get();
+    return [...state.activityFeed]
+      .map((item) => ({
+        id: item.id,
+        title: item.title,
+        detail: item.detail,
+        timestamp: item.timestamp,
+        tripId: item.tripId,
+        hospital: item.hospital,
+        read: state.readNotificationIds.has(item.id),
+      }))
+      .sort((a, b) => new Date(b.timestamp ?? 0).getTime() - new Date(a.timestamp ?? 0).getTime());
+  },
+
+  markNotificationRead: (id) =>
+    set((state) => ({ readNotificationIds: new Set(state.readNotificationIds).add(id) })),
+
+  markAllNotificationsRead: () =>
+    set((state) => {
+      const ids = new Set(state.readNotificationIds);
+      state.activityFeed.forEach((item) => ids.add(item.id));
+      return { readNotificationIds: ids };
+    }),
 }));
