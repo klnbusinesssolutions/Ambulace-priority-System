@@ -22,7 +22,6 @@ export function LiveTracking() {
           emergencies={emergencies}
           hospitals={hospitals}
           trafficReports={trafficReports}
-          showInfoPanel={false}
           stageAwareMarkers
         />
 

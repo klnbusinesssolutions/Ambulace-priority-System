@@ -36,6 +36,7 @@ import {
   getEmergencyStage,
 } from "@/services/policeConstants";
 import { subscribeToEmergencies } from "@/services/realtimeEmergencyService";
+import { computeAnalytics } from "@/services/analyticsService";
 import { startTripAlertWatcher } from "@/services/tripAlertWatcher";
 import { geocodeAddress } from "@/services/geocodingService";
 import { notifyNewEmergency, notifyTripAlert } from "@/services/notify";
@@ -475,6 +476,13 @@ export const usePoliceStore = create((set, get) => ({
       }));
     };
 
+    // Recomputes every Trip Analytics metric from whatever's currently in the store
+    // (emergencies + activityFeed - both already live Firestore listeners), so the
+    // analytics page always reflects real data with no separate doc to keep in sync.
+    const recomputeAnalytics = () => {
+      set({ analytics: computeAnalytics({ emergencies: get().emergencies, activityFeed: get().activityFeed }) });
+    };
+
     const syncEmergencies = () => {
       const merged = enrichEmergencies(latestRawEmergencies, {
         drivers: latestDrivers,
@@ -506,6 +514,7 @@ export const usePoliceStore = create((set, get) => ({
           ? state.selectedEmergencyId
           : merged[0]?.id ?? null,
       }));
+      recomputeAnalytics();
     };
 
     const unsubEmergencies = subscribeToEmergencies(
@@ -587,6 +596,7 @@ export const usePoliceStore = create((set, get) => ({
       { orderField: "createdAt", direction: "desc" },
       (liveActivity) => {
         set({ activityFeed: liveActivity.filter(isTripActivity).map(normalizeActivityRecord) });
+        recomputeAnalytics();
         handleConnected();
       },
       handleError,
@@ -639,15 +649,6 @@ export const usePoliceStore = create((set, get) => ({
       handleError,
     );
 
-    const unsubAnalytics = subscribeToDocument(
-      FIRESTORE_DOCS.analytics,
-      (liveAnalytics) => {
-        set({ analytics: { ...emptyAnalytics, ...liveAnalytics } });
-        handleConnected();
-      },
-      handleError,
-    );
-
     const unsubTripAlerts = startTripAlertWatcher(() => get().emergencies);
 
     const unsubscribers = [
@@ -660,7 +661,6 @@ export const usePoliceStore = create((set, get) => ({
       unsubActivity,
       unsubHospitals,
       unsubSystemStatus,
-      unsubAnalytics,
       unsubTripAlerts,
     ];
 

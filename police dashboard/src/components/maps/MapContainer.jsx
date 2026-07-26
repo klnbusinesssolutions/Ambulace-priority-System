@@ -10,7 +10,6 @@ import { GOOGLE_MAPS_LIBRARIES, GOOGLE_MAPS_LOADER_ID } from "@/services/googleM
 import { usePoliceStore } from "@/store/policeStore";
 import { formatRelativeTime } from "@/utils/format";
 
-const STATIONARY_SPEED_THRESHOLD = 8;
 const DEFAULT_CENTER = { lat: 18.5204, lng: 73.8567 }; // Pune, used only when no station/emergencies to center on
 const AUTO_REFRESH_MS = 15000; // Firestore already pushes position updates instantly; this just
 // periodically re-fits the viewport so every active unit stays visible and gives a visible
@@ -160,7 +159,6 @@ export function MapContainer({
   emergencies,
   hospitals,
   trafficReports = [],
-  showInfoPanel = true,
   stageAwareMarkers = false,
 }) {
   const { isLoaded, loadError } = useJsApiLoader({
@@ -214,9 +212,6 @@ export function MapContainer({
 
   const center = station?.lat && station?.lng ? station : averageCoordinates(emergencyPoints) ?? DEFAULT_CENTER;
   const zoom = !cityWide && station ? 13 : 12;
-
-  const isStationary =
-    typeof activeEmergency?.speed === "number" && activeEmergency.speed < STATIONARY_SPEED_THRESHOLD;
 
   // Every AUTO_REFRESH_MS, nudge the viewport to make sure every active unit and every
   // hospital is still in frame (positions themselves already stream in live via Firestore)
@@ -543,46 +538,6 @@ export function MapContainer({
         </Button>
       </div>
 
-      {showInfoPanel && (
-        <div className="absolute bottom-4 left-4 right-4 z-10 grid gap-2 rounded-lg border bg-white/95 p-3 shadow-panel sm:grid-cols-3 lg:grid-cols-6">
-          <div>
-            <p className="text-xs text-slate-500">Active route</p>
-            <p className="truncate text-sm font-semibold text-slate-950">
-              {activeEmergency?.id} · {activeEmergency?.type}
-            </p>
-          </div>
-          <div>
-            <p className="text-xs text-slate-500">Destination</p>
-            <p className="truncate text-sm font-semibold text-slate-950">{activeEmergency?.destinationHospital}</p>
-          </div>
-          <div>
-            <p className="flex items-center gap-1 text-xs text-slate-500">
-              <Ambulance className="h-3 w-3" /> Speed
-            </p>
-            <p className="truncate text-sm font-semibold text-slate-950">{activeEmergency?.speed ?? "--"} km/h</p>
-          </div>
-          <div>
-            <p className="text-xs text-slate-500">Distance / Current road</p>
-            <p className="truncate text-sm font-semibold text-slate-950">
-              {activeEmergency?.distanceRemaining ?? "--"} km · {activeEmergency?.currentRoad ?? "Unknown"}
-            </p>
-          </div>
-          <div>
-            <p className="text-xs text-slate-500">Last updated</p>
-            <p className="truncate text-sm font-semibold text-slate-950">
-              {activeEmergency ? formatRelativeTime(activeEmergency.lastUpdated) : "--"}
-            </p>
-          </div>
-          <div>
-            <p className="text-xs text-slate-500">Status</p>
-            {isStationary ? (
-              <Badge variant="critical">Stationary warning</Badge>
-            ) : (
-              <Badge variant="success">Moving</Badge>
-            )}
-          </div>
-        </div>
-      )}
     </section>
   );
 }
