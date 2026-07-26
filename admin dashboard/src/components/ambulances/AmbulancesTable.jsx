@@ -1,4 +1,4 @@
-import { Check, Eye, FileSearch, Pencil, RotateCcw, X } from "lucide-react";
+import { Check, Eye, FileSearch, Loader2, Pencil, RotateCcw, X } from "lucide-react";
 import { formatDateTime } from "../../utils/formatters.js";
 import Button from "../ui/Button.jsx";
 import DataTable from "../ui/DataTable.jsx";
@@ -14,6 +14,7 @@ export default function AmbulancesTable({
   onViewDocuments,
   onEdit,
   showVerificationActions = true,
+  actionId = null,
 }) {
   const columns = [
     {
@@ -44,7 +45,7 @@ export default function AmbulancesTable({
     render: (row) => (
       <div className="flex justify-end gap-1">
         {onEdit && (
-          <Button variant="ghost" size="icon" onClick={() => onEdit(row)} aria-label={`Edit ${row.numberPlate}`}>
+          <Button variant="ghost" size="icon" onClick={() => onEdit(row)} aria-label={`Edit ${row.numberPlate}`} disabled={actionId === row.id}>
             <Pencil className="h-4 w-4 text-slate-600" />
           </Button>
         )}
@@ -58,13 +59,35 @@ export default function AmbulancesTable({
         )}
         {showVerificationActions && (
           <>
-            <Button variant="ghost" size="icon" onClick={() => onApprove(row)} aria-label={`Approve ${row.numberPlate}`} disabled={row.status === "approved"}>
-              <Check className="h-4 w-4 text-emerald-700" />
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => onApprove(row)}
+              aria-label={`Approve ${row.numberPlate}`}
+              disabled={row.status === "approved" || actionId === row.id}
+            >
+              {actionId === row.id ? (
+                <Loader2 className="h-4 w-4 animate-spin text-emerald-700" />
+              ) : (
+                <Check className="h-4 w-4 text-emerald-700" />
+              )}
             </Button>
-            <Button variant="ghost" size="icon" onClick={() => onReject(row)} aria-label={`Reject ${row.numberPlate}`} disabled={row.status === "rejected"}>
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => onReject(row)}
+              aria-label={`Reject ${row.numberPlate}`}
+              disabled={row.status === "rejected" || actionId === row.id}
+            >
               <X className="h-4 w-4 text-red-700" />
             </Button>
-            <Button variant="ghost" size="icon" onClick={() => onRequestResubmission(row)} aria-label={`Request resubmission for ${row.numberPlate}`} disabled={row.status === "resubmission_required"}>
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => onRequestResubmission(row)}
+              aria-label={`Request resubmission for ${row.numberPlate}`}
+              disabled={row.status === "resubmission_required" || actionId === row.id}
+            >
               <RotateCcw className="h-4 w-4 text-orange-700" />
             </Button>
           </>

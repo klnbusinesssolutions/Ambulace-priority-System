@@ -91,11 +91,8 @@ export function OpsProvider({ children }) {
   const [pendingDrivers, setPendingDrivers] = useLiveCollection(listenToPendingDrivers, demoPendingDrivers);
   const [rejectedRequestsCollection, setRejectedRequestsCollection] = useLiveCollection(listenToRejectedRequests, demoRejectedRequests);
   const [drivers] = useLiveCollection(listenToDrivers, demoDrivers);
-  const [pendingAmbulances] = useLiveCollection(listenToPendingAmbulances, demoPendingAmbulances);
-  const [ambulances] = useLiveCollection(
-  listenToAmbulances,
-  []
-);
+  const [pendingAmbulances, setPendingAmbulances] = useLiveCollection(listenToPendingAmbulances, demoPendingAmbulances);
+  const [ambulances, setAmbulances] = useLiveCollection(listenToAmbulances, []);
   const [emergencies] = useLiveCollection(listenToEmergencies, demoEmergencies);
   const [liveLocations] = useLiveCollection(listenToLiveLocations, demoLiveLocations);
   const [notifications, setNotifications] = useLiveCollection(listenToNotifications, demoNotifications);
@@ -149,7 +146,14 @@ export function OpsProvider({ children }) {
     add: (record) => createAmbulance(record),
     update: (id, patch) => updateAmbulance(id, patch),
     remove: (id) => removeAmbulance(id),
-    approve: (ambulance) => approvePendingAmbulance(ambulance),
+    approve: async (ambulance) => {
+      const approvedData = await approvePendingAmbulance(ambulance);
+      if (!firebaseReady) {
+        setPendingAmbulances((prev) => prev.filter((a) => a.id !== ambulance.id));
+        setAmbulances((prev) => [...prev.filter((a) => a.id !== ambulance.id), approvedData]);
+      }
+      return approvedData;
+    },
     reject: async (ambulance, reason) => {
       const rejectedData = await rejectPendingAmbulance(ambulance, reason);
       if (!firebaseReady) {

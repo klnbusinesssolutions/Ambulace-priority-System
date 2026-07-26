@@ -4,6 +4,7 @@
 
 export const COLLECTIONS = {
   admins: "admins", // doc id = {uid}
+  users: "users", // doc id = {uid}
   hospitals: "hospitals", // doc id = {hospitalId}
   drivers: "drivers", // doc id = auto, written by the Android driver app
   pendingDrivers: "pending_drivers", // doc id = auto, written by the hospital dashboard

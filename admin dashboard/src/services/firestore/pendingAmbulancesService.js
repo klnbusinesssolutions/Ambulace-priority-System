@@ -36,48 +36,70 @@ export async function listenToAllAmbulances(callback, onError) {
 
 export async function approvePendingAmbulance(ambulance) {
   const admin = await getCurrentAdmin();
+  const timestamp = serverTimestamp();
 
-  // Create approved ambulance
-  await createApprovedAmbulance({
-    id: ambulance.id,
-    hospitalId: ambulance.hospitalId,
-    hospitalName: ambulance.hospitalName,
+  const registrationNumber = (ambulance.registrationNumber || "").trim().toUpperCase();
+  const medicalCapabilities = formatMedicalCapabilities(ambulance.medicalCapabilities);
 
-    registrationNumber: ambulance.registrationNumber,
-    numberPlate: ambulance.numberPlate,
-    vehicleType: ambulance.vehicleType,
-    capacity: ambulance.capacity,
-    availability: ambulance.availability,
+  const approvedData = {
+    ...ambulance,
+    registrationNumber: registrationNumber || ambulance.registrationNumber || "N/A",
+    numberPlate: ambulance.numberPlate || registrationNumber || "N/A",
+    manufacturer: ambulance.manufacturer || "N/A",
+    model: ambulance.model || "N/A",
+    vehicleType: ambulance.vehicleType || "Basic",
+    capacity: ambulance.capacity || "12 Seater",
+    availability: ambulance.availability || "available",
+    medicalCapabilities,
+    hospitalId: ambulance.hospitalId || "",
+    hospitalName: ambulance.hospitalName || "",
+    assignedDrivers: ambulance.assignedDrivers || [],
+    activeDriverId: ambulance.activeDriverId || null,
+    documents: ambulance.documents || {},
+    location: ambulance.location || null,
+    status: VERIFICATION_STATUS.approved,
+    approvedAt: hasFirebaseConfig() ? timestamp : new Date().toISOString(),
+    updatedAt: hasFirebaseConfig() ? timestamp : new Date().toISOString(),
+  };
 
-    assignedDrivers: ambulance.assignedDrivers,
-    activeDriverId: ambulance.activeDriverId,
+  if (hasFirebaseConfig()) {
+    const app = await getFirebaseApp();
+    const db = getFirestore(app);
+    const batch = writeBatch(db);
 
-    documents: ambulance.documents,
-  });
+    const approvedRef = doc(db, COLLECTIONS.ambulances, ambulance.id);
+    const pendingRef = doc(db, COLLECTIONS.pendingAmbulances, ambulance.id);
 
-  // Notification
-  await createNotification({
-    hospitalId: ambulance.hospitalId,
-    type: "ambulance_approved",
-    title: "Ambulance Approved",
-    message: `Ambulance ${
-      ambulance.numberPlate || ambulance.registrationNumber
-    } has been approved`,
-  });
+    batch.set(approvedRef, approvedData, { merge: true });
+    batch.delete(pendingRef);
 
-  // Activity Log
-  await createActivityLog({
-    hospitalId: ambulance.hospitalId,
-    action: "ambulance_approved",
-    performedBy: admin?.uid || "unknown",
-    targetId: ambulance.id,
-    details: `Ambulance ${
-      ambulance.numberPlate || ambulance.registrationNumber
-    } approved`,
-  });
+    await batch.commit();
 
-  // Remove from pending collection
-  await pendingAmbulances.remove(ambulance.id);
+    try {
+      await createNotification({
+        hospitalId: ambulance.hospitalId,
+        type: "ambulance_approved",
+        title: "Ambulance Approved",
+        message: `Ambulance ${ambulance.numberPlate || ambulance.registrationNumber} has been approved`,
+      });
+    } catch (err) {
+      console.error("Failed to create notification on ambulance approval:", err);
+    }
+
+    try {
+      await createActivityLog({
+        hospitalId: ambulance.hospitalId,
+        action: "ambulance_approved",
+        performedBy: admin?.uid || "unknown",
+        targetId: ambulance.id,
+        details: `Ambulance ${ambulance.numberPlate || ambulance.registrationNumber} approved`,
+      });
+    } catch (err) {
+      console.error("Failed to create activity log on ambulance approval:", err);
+    }
+  }
+
+  return approvedData;
 }
 
 export async function rejectPendingAmbulance(ambulance, rejectionReason = "") {

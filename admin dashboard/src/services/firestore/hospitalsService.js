@@ -5,6 +5,7 @@ import { validateHospitalPassword } from "../../utils/passwordValidation.js";
 import { validateHospitalEmail, validateHospitalPhone } from "../../utils/hospitalValidation.js";
 
 const hospitals = createCollectionService(COLLECTIONS.hospitals);
+const users = createCollectionService(COLLECTIONS.users);
 
 export async function listenToHospitals(callback, onError) {
   return hospitals.listen(callback, { constraints: [orderBy("name", "asc")], onError });
@@ -17,14 +18,16 @@ export async function getHospital(hospitalId) {
 /**
  * Creates a Firebase Auth user for the hospital (using a secondary Auth instance
  * so the Super Admin is not signed out), then saves the hospital document
- * in Firestore with the generated `authUid`.
+ * in Firestore with the generated `authUid` and corresponding `users` document.
  * If Firestore write fails, it rolls back by deleting the Auth user.
  */
 export async function createHospital(hospitalId, data) {
   let authUid = data.authUid || "";
   let createdUser = null;
 
-  const emailErr = validateHospitalEmail(data.email);
+  const normalizedEmail = (data.email || "").trim().toLowerCase();
+
+  const emailErr = validateHospitalEmail(normalizedEmail);
   if (emailErr) {
     throw new Error(emailErr);
   }
@@ -42,7 +45,7 @@ export async function createHospital(hospitalId, data) {
     }
   }
 
-  if (!authUid && data.email && data.password && hasFirebaseConfig()) {
+  if (!authUid && normalizedEmail && data.password && hasFirebaseConfig()) {
     const { initializeApp, deleteApp } = await import("firebase/app");
     const { getAuth, createUserWithEmailAndPassword, signOut } = await import("firebase/auth");
 
@@ -60,7 +63,7 @@ export async function createHospital(hospitalId, data) {
     const secondaryAuth = getAuth(secondaryApp);
 
     try {
-      const userCredential = await createUserWithEmailAndPassword(secondaryAuth, data.email, data.password);
+      const userCredential = await createUserWithEmailAndPassword(secondaryAuth, normalizedEmail, data.password);
       authUid = userCredential.user.uid;
       createdUser = userCredential.user;
       await signOut(secondaryAuth);
@@ -86,15 +89,37 @@ export async function createHospital(hospitalId, data) {
   // Guarantee that password is deleted from payload before writing to Firestore
   const cleanData = { ...data };
   delete cleanData.password;
+  cleanData.email = normalizedEmail;
+
+  const isActive = cleanData.isActive ?? true;
+
+  const hospitalPayload = {
+    hospitalId,
+    authUid,
+    role: "hospital_admin",
+    isActive,
+    status: isActive ? "approved" : "inactive",
+    createdAt: serverTimestamp(),
+    ...cleanData,
+  };
+
+  const userPayload = {
+    uid: authUid,
+    email: normalizedEmail,
+    role: "hospital_admin",
+    hospitalId,
+    hospitalName: cleanData.name || "",
+    isActive,
+    status: isActive ? "approved" : "inactive",
+    createdAt: serverTimestamp(),
+  };
 
   try {
-    return await hospitals.setById(hospitalId, {
-      hospitalId,
-      authUid,
-      isActive: cleanData.isActive ?? true,
-      createdAt: serverTimestamp(),
-      ...cleanData,
-    });
+    // Write user doc first so security rules can resolve user permissions immediately
+    if (authUid && !authUid.startsWith("auth-hsp-")) {
+      await users.setById(authUid, userPayload);
+    }
+    return await hospitals.setById(hospitalId, hospitalPayload);
   } catch (firestoreError) {
     if (createdUser) {
       try {
@@ -103,6 +128,11 @@ export async function createHospital(hospitalId, data) {
       } catch (rollbackErr) {
         console.error("Failed to rollback Auth user creation:", rollbackErr);
       }
+    }
+    if (authUid && !authUid.startsWith("auth-hsp-")) {
+      try {
+        await users.remove(authUid);
+      } catch (_) {}
     }
     throw new Error(`Failed to create hospital in Firestore. ${firestoreError.message || ""}`);
   }

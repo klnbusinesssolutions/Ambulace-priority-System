@@ -11,7 +11,13 @@ const ambulances = createCollectionService(COLLECTIONS.ambulances);
 export async function createAmbulance(ambulance) {
   const registrationNumber = (ambulance.registrationNumber || "").trim().toUpperCase();
   const medicalCapabilities = formatMedicalCapabilities(ambulance.medicalCapabilities);
-  const payload = { ...ambulance, registrationNumber, medicalCapabilities };
+  const payload = {
+    manufacturer: "N/A",
+    model: "N/A",
+    ...ambulance,
+    registrationNumber,
+    medicalCapabilities,
+  };
 
   const errors = validateAmbulanceForm(payload);
   if (Object.keys(errors).length > 0) {

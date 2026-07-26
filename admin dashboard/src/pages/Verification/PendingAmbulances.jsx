@@ -26,6 +26,9 @@ export default function PendingAmbulances() {
   const [selected, setSelected] = useState(null);
   const [modal, setModal] = useState(null);
   const [reason, setReason] = useState("");
+  const [actionId, setActionId] = useState(null);
+  const [successMessage, setSuccessMessage] = useState("");
+  const [errorMessage, setErrorMessage] = useState("");
 
   const rows = useMemo(
     () =>
@@ -43,9 +46,37 @@ export default function PendingAmbulances() {
     setModal(kind);
   }
 
+  async function handleApprove(unit) {
+    setSuccessMessage("");
+    setErrorMessage("");
+    setActionId(unit.id);
+    try {
+      await pendingAmbulancesActions.approve(unit);
+      setSuccessMessage(`Ambulance ${unit.numberPlate || unit.registrationNumber} approved successfully.`);
+    } catch (err) {
+      console.error("Failed to approve ambulance:", err);
+      setErrorMessage(err.message || "Failed to approve ambulance. Please try again.");
+    } finally {
+      setActionId(null);
+    }
+  }
+
   async function confirmReasonAction() {
-    if (modal === "reject") await pendingAmbulancesActions.reject(selected, reason);
-    if (modal === "resubmit") await pendingAmbulancesActions.requestResubmission(selected, reason);
+    setSuccessMessage("");
+    setErrorMessage("");
+    try {
+      if (modal === "reject") {
+        await pendingAmbulancesActions.reject(selected, reason);
+        setSuccessMessage(`Ambulance ${selected?.numberPlate || selected?.registrationNumber} rejected.`);
+      }
+      if (modal === "resubmit") {
+        await pendingAmbulancesActions.requestResubmission(selected, reason);
+        setSuccessMessage(`Resubmission requested for ambulance ${selected?.numberPlate || selected?.registrationNumber}.`);
+      }
+    } catch (err) {
+      console.error("Action failed:", err);
+      setErrorMessage(err.message || "Action failed. Please try again.");
+    }
     setModal(null);
   }
 
@@ -55,6 +86,16 @@ export default function PendingAmbulances() {
         title="Pending Ambulances"
         description="Verification queue from the pending_ambulances collection, written by hospital dashboards."
       />
+      {successMessage && (
+        <div className="rounded-md border border-emerald-200 bg-emerald-50 p-4 text-sm font-medium text-emerald-800">
+          {successMessage}
+        </div>
+      )}
+      {errorMessage && (
+        <div className="rounded-md border border-red-200 bg-red-50 p-4 text-sm font-medium text-red-800">
+          {errorMessage}
+        </div>
+      )}
       <div className="grid gap-3 rounded-lg border border-slate-200 bg-white p-4 md:grid-cols-[minmax(220px,1fr)_220px]">
         <Input placeholder="Search vehicle number..." value={query} onChange={(event) => setQuery(event.target.value)} />
         <Select value={status} onChange={(event) => setStatus(event.target.value)} options={["All statuses", "pending", "approved", "rejected", "resubmission_required"]} />
@@ -62,7 +103,8 @@ export default function PendingAmbulances() {
 
       <AmbulancesTable
         rows={rows}
-        onApprove={(unit) => pendingAmbulancesActions.approve(unit)}
+        actionId={actionId}
+        onApprove={handleApprove}
         onReject={(unit) => openReasonModal("reject", unit)}
         onRequestResubmission={(unit) => openReasonModal("resubmit", unit)}
         onViewDetails={(unit) => { setSelected(unit); setModal("details"); }}
