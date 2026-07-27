@@ -1,9 +1,12 @@
 import {
   createUserWithEmailAndPassword,
+  EmailAuthProvider,
   onAuthStateChanged,
+  reauthenticateWithCredential,
   sendPasswordResetEmail,
   signInWithEmailAndPassword,
   signOut,
+  updatePassword,
 } from "firebase/auth";
 import { addDoc, collection, serverTimestamp } from "firebase/firestore";
 
@@ -104,4 +107,21 @@ export async function sendPolicePasswordReset(identifier) {
   if (!email) return;
 
   await sendPasswordResetEmail(auth, email);
+}
+
+// Used by Settings > Change Password. Firebase requires a recent login before it will accept
+// a password change, so this re-authenticates with the officer's current password first -
+// this also doubles as verifying they actually know the current password before letting them
+// set a new one.
+export async function changeCurrentUserPassword(currentPassword, newPassword) {
+  if (!auth?.currentUser) {
+    throw new Error("You must be signed in to change your password.");
+  }
+  if (!newPassword || newPassword.length < 8) {
+    throw new Error("New password must be at least 8 characters.");
+  }
+
+  const credential = EmailAuthProvider.credential(auth.currentUser.email, currentPassword);
+  await reauthenticateWithCredential(auth.currentUser, credential);
+  await updatePassword(auth.currentUser, newPassword);
 }

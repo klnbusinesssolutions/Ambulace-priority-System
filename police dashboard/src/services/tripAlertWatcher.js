@@ -2,6 +2,7 @@ import { collection, doc, getDoc, onSnapshot, serverTimestamp, setDoc } from "fi
 
 import { firestore } from "@/firebase/config";
 import { FIRESTORE_COLLECTIONS } from "@/services/firebaseDataService";
+import { buildEmergencyDisplayIds } from "@/utils/emergencyId";
 
 // The driver app (AmbulanceDriverApp/App.tsx) writes `tripStatus` onto the
 // driver's own doc in `drivers/{driverId}` - not onto the emergency doc -
@@ -52,8 +53,15 @@ export function startTripAlertWatcher(getActiveEmergencies) {
   const lastSeenStatus = new Map(); // driverId -> tripStatus, to skip redundant snapshot events
 
   const unsubscribe = onSnapshot(collection(firestore, "drivers"), async (snapshot) => {
-    const activeEmergencies = getActiveEmergencies().filter(isTripActive);
+    const allEmergencies = getActiveEmergencies();
+    const activeEmergencies = allEmergencies.filter(isTripActive);
     if (activeEmergencies.length === 0) return;
+
+    // Human-readable "EMG-0001" style code (see utils/emergencyId.js), built from every
+    // known emergency so it matches the same code shown elsewhere in the dashboard - never
+    // the raw Firestore document id (that's what used to leak into notifications, e.g.
+    // "trip oQbzMHdPyx0LMKCBZ7WG").
+    const displayIds = buildEmergencyDisplayIds(allEmergencies);
 
     for (const change of snapshot.docChanges()) {
       if (change.type === "removed") continue;
@@ -74,12 +82,17 @@ export function startTripAlertWatcher(getActiveEmergencies) {
       const existing = await getDoc(alertRef);
       if (existing.exists()) continue;
 
+      const emergencyDisplayId = displayIds.get(emergency.id) ?? emergency.id;
+
       await setDoc(alertRef, {
         title: rule.title,
-        description: `${emergency.driverName ?? "Driver"} - ${rule.title.toLowerCase()} (trip ${emergency.id}).`,
+        // "Emergency ID: EMG-2045 · Driver: Tarik Khan · <what happened>." - never labelled
+        // "Trip ID" and never the raw Firestore doc id (see comment above).
+        description: `Emergency ID: ${emergencyDisplayId} · Driver: ${emergency.driverName ?? "Unknown"} · ${rule.title}.`,
         category: rule.category,
         severity: rule.severity,
         tripId: emergency.id,
+        emergencyDisplayId,
         driverId,
         hospitalId: emergency.destinationHospital ?? null,
         read: false,
@@ -100,7 +113,8 @@ export function startTripAlertWatcher(getActiveEmergencies) {
         action: `trip_${tripStatus}`,
         performedBy: driverId,
         targetId: emergency.id,
-        details: rule.title,
+        title: rule.title,
+        details: `Emergency ID: ${emergencyDisplayId} · Driver: ${emergency.driverName ?? "Unknown"} · ${rule.title}.`,
         createdAt: serverTimestamp(),
       });
     }

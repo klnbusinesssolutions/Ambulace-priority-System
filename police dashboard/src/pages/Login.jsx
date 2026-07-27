@@ -5,6 +5,7 @@ import { Link, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { usePoliceStore } from "@/store/policeStore";
+import { loadDashboardPreferences } from "@/utils/settingsPreferences";
 
 export function Login() {
   const [email, setEmail] = useState("");
@@ -21,7 +22,7 @@ export function Login() {
 
     try {
       await login(email, password);
-      navigate("/");
+      navigate(loadDashboardPreferences().landingPage || "/");
     } catch (error) {
       setFormError(error.message || "Unable to authorize access. Check your credentials and try again.");
     } finally {

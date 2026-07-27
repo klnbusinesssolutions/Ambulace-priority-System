@@ -287,3 +287,19 @@ export async function getPoliceOfficerProfile(uid) {
   return snapshot.exists() ? { id: snapshot.id, ...snapshot.data() } : null;
 }
 
+// Used by Settings > Police Officer Profile. Officers can edit their own display name and
+// contact number here; badge id and station stay read-only (assigned by an admin, see admin
+// dashboard's Pending Police Officers approval flow) so this deliberately only ever writes
+// `name`/`displayName`/`phone`, never `badgeId`/`station`/`status`/`isActive`.
+export async function updatePoliceOfficerProfile(uid, { name, phone }) {
+  if (!firestore || !uid) return;
+
+  await updateDoc(
+    doc(firestore, FIRESTORE_COLLECTIONS.users, uid),
+    withUpdatedAt({
+      ...(name !== undefined ? { name, displayName: name } : {}),
+      ...(phone !== undefined ? { phone } : {}),
+    }),
+  );
+}
+

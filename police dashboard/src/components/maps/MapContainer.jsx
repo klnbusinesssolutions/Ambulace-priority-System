@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Circle, DirectionsRenderer, GoogleMap, InfoWindow, Marker, Polyline, useJsApiLoader } from "@react-google-maps/api";
+import { Circle, DirectionsRenderer, GoogleMap, InfoWindow, Marker, TrafficLayer, useJsApiLoader } from "@react-google-maps/api";
 import { Ambulance, Clock, Gauge, Hospital, MapPin, RefreshCw, Satellite, Signpost } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
@@ -9,11 +9,13 @@ import { useEmergencyDisplayIds } from "@/hooks/useEmergencyDisplayIds";
 import { GOOGLE_MAPS_LIBRARIES, GOOGLE_MAPS_LOADER_ID } from "@/services/googleMapsConfig";
 import { usePoliceStore } from "@/store/policeStore";
 import { formatRelativeTime } from "@/utils/format";
+import { loadDashboardPreferences, loadMapPreferences } from "@/utils/settingsPreferences";
 
 const DEFAULT_CENTER = { lat: 18.5204, lng: 73.8567 }; // Pune, used only when no station/emergencies to center on
-const AUTO_REFRESH_MS = 15000; // Firestore already pushes position updates instantly; this just
+// Base auto-refresh interval - Firestore already pushes position updates instantly; this just
 // periodically re-fits the viewport so every active unit stays visible and gives a visible
 // "still live" heartbeat, independent of how often the underlying data actually changes.
+// Settings > Dashboard Preferences > "Auto Refresh Interval" overrides this per-browser.
 
 const SEVERITY_COLORS = {
   Critical: "#dc2626",
@@ -24,6 +26,25 @@ const SEVERITY_COLORS = {
 
 function severityColor(severity) {
   return SEVERITY_COLORS[severity] ?? SEVERITY_COLORS.Medium;
+}
+
+// Distinct per-emergency route colors so an operator can visually match an
+// ambulance's marker to its own route even with several trips on screen at
+// once (Blue / Red / Green / Purple / Orange, then repeats). Assigned by
+// stable sort order (emergency id), not array index, so a given emergency
+// keeps the same route color across re-renders even as other emergencies
+// start/finish around it.
+const ROUTE_COLOR_PALETTE = ["#2563eb", "#dc2626", "#16a34a", "#9333ea", "#ea580c", "#0891b2", "#db2777", "#65a30d"];
+
+function useRouteColors(emergencies) {
+  return useMemo(() => {
+    const sortedIds = [...emergencies.map((e) => e.id)].sort();
+    const colors = new Map();
+    sortedIds.forEach((id, index) => {
+      colors.set(id, ROUTE_COLOR_PALETTE[index % ROUTE_COLOR_PALETTE.length]);
+    });
+    return colors;
+  }, [emergencies]);
 }
 
 function averageCoordinates(points) {
@@ -184,11 +205,14 @@ export function MapContainer({
   }, [isLoaded, regeocodeHospitals]);
 
   const activeEmergency = emergencies.find((emergency) => emergency.id === selectedEmergencyId) ?? emergencies[0];
-  const [satelliteView, setSatelliteView] = useState(false);
+  const [satelliteView, setSatelliteView] = useState(() => loadMapPreferences().defaultMapType === "satellite");
+  const [mapPrefs] = useState(() => loadMapPreferences());
+  const [autoRefreshMs] = useState(() => Math.max(5, loadDashboardPreferences().autoRefreshSeconds || 15) * 1000);
   const [infoWindowId, setInfoWindowId] = useState(null);
   const popupEmergency = emergencies.find((emergency) => emergency.id === infoWindowId);
 
   const routesById = useAmbulanceRoutes(emergencies, isLoaded);
+  const routeColors = useRouteColors(emergencies);
 
   const mapRef = useRef(null);
   const onMapLoad = useCallback((map) => {
@@ -230,9 +254,9 @@ export function MapContainer({
       setLastSyncedAt(Date.now());
     };
 
-    const interval = setInterval(refresh, AUTO_REFRESH_MS);
+    const interval = setInterval(refresh, autoRefreshMs);
     return () => clearInterval(interval);
-  }, [emergencyPoints, hospitalPoints]);
+  }, [emergencyPoints, hospitalPoints, autoRefreshMs]);
 
   useEffect(() => {
     const tick = setInterval(() => setSecondsSinceSync(Math.floor((Date.now() - lastSyncedAt) / 1000)), 1000);
@@ -244,7 +268,7 @@ export function MapContainer({
   // its live details card - satisfies "clicking an emergency should zoom + highlight + show
   // details" without also yanking the camera every time someone merely clicks a map marker.
   useEffect(() => {
-    if (!drawerOpen || !selectedEmergencyId) return;
+    if (!drawerOpen || !selectedEmergencyId || !mapPrefs.autoCenterOnActiveEmergency) return;
     const target = emergencies.find((emergency) => emergency.id === selectedEmergencyId);
     const map = mapRef.current;
     if (map && target?.coordinates) {
@@ -290,6 +314,7 @@ export function MapContainer({
         mapTypeId={satelliteView ? "satellite" : "roadmap"}
         options={{ streetViewControl: false, mapTypeControl: false, fullscreenControl: false }}
       >
+        {mapPrefs.trafficLayer && <TrafficLayer />}
         {!cityWide && station?.lat && station?.lng && (
           <Circle
             center={station}
@@ -321,45 +346,33 @@ export function MapContainer({
 
         {emergencies.map((emergency) => {
           const isActive = emergency.id === activeEmergency?.id;
-          const routeColor = isActive ? "#175cd3" : "#94a3b8";
+          // Each emergency gets its own fixed color (see ROUTE_COLOR_PALETTE) so multiple
+          // simultaneous ambulance routes stay visually distinguishable; the selected/active
+          // emergency's route is simply drawn bolder and above the others, never recolored.
+          const routeColor = routeColors.get(emergency.id) ?? "#2563eb";
           const route = routesById[emergency.id];
 
-          if (route) {
-            return (
-              <DirectionsRenderer
-                key={`${emergency.id}-route`}
-                directions={route}
-                options={{
-                  suppressMarkers: true,
-                  preserveViewport: true,
-                  polylineOptions: {
-                    strokeColor: routeColor,
-                    strokeOpacity: isActive ? 0.95 : 0.5,
-                    strokeWeight: isActive ? 5 : 3,
-                    zIndex: isActive ? 500 : 1,
-                  },
-                }}
-              />
-            );
-          }
+          // Only ever render the actual Google Directions route - no manual straight-line
+          // Polyline fallback. Until the Directions API responds, this emergency simply has
+          // no route drawn yet rather than a straight line cutting across the map.
+          if (!route) return null;
 
-          // Route not back from the Directions API yet (or it failed) - show a straight
-          // line so the ambulance's intended path is never blank while that resolves.
-          const patientOnboard = PATIENT_ALREADY_ONBOARD_STATUSES.has(emergency.tripStatus);
-          const fallbackDestination = patientOnboard ? emergency.destinationHospitalCoordinates : emergency.pickup;
-          const fallbackPath = [emergency.coordinates, fallbackDestination].filter(Boolean);
-          return fallbackPath.length > 1 ? (
-            <Polyline
-              key={`${emergency.id}-route-fallback`}
-              path={fallbackPath}
+          return (
+            <DirectionsRenderer
+              key={`${emergency.id}-route`}
+              directions={route}
               options={{
-                strokeColor: routeColor,
-                strokeOpacity: isActive ? 0.7 : 0.35,
-                strokeWeight: isActive ? 3 : 2,
-                icons: [{ icon: { path: "M 0,-1 0,1", strokeOpacity: 1, scale: 2 }, offset: "0", repeat: "12px" }],
+                suppressMarkers: true,
+                preserveViewport: true,
+                polylineOptions: {
+                  strokeColor: routeColor,
+                  strokeOpacity: isActive ? 0.95 : 0.6,
+                  strokeWeight: isActive ? 6 : 4,
+                  zIndex: isActive ? 500 : 1,
+                },
               }}
             />
-          ) : null;
+          );
         })}
 
         {(stageAwareMarkers

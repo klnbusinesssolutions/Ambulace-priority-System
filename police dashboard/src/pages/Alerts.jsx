@@ -1,10 +1,9 @@
 import { CheckCheck } from "lucide-react";
 
-import { AlertCard } from "@/components/alerts/AlertCard";
+import { AlertsTable } from "@/components/alerts/AlertsTable";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { EmptyState } from "@/components/ui/empty-state";
 import { alertCategories } from "@/services/policeConstants";
 import { usePoliceStore } from "@/store/policeStore";
 
@@ -92,16 +91,8 @@ export function Alerts() {
           </label>
         </div>
 
-        <CardContent className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-          {filtered.length ? (
-            filtered.map((alert) => (
-              <AlertCard key={alert.id} alert={alert} onMarkRead={markAlertRead} onDelete={deleteAlert} />
-            ))
-          ) : (
-            <div className="md:col-span-2 xl:col-span-3">
-              <EmptyState title="No alerts match your filters" />
-            </div>
-          )}
+        <CardContent className="p-0">
+          <AlertsTable alerts={filtered} onMarkRead={markAlertRead} onDelete={deleteAlert} />
         </CardContent>
       </Card>
     </>

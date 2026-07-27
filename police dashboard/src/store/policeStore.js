@@ -13,6 +13,7 @@ import {
   FIRESTORE_COLLECTIONS,
   FIRESTORE_DOCS,
   getPoliceOfficerProfile,
+  updatePoliceOfficerProfile,
   markAllAlertsReadRemote,
   normalizeActivityRecord,
   isTripActivity,
@@ -101,6 +102,7 @@ function toOperator(user) {
     department: null,
     station: null,
     serviceRadiusKm: null,
+    phone: null,
   };
 }
 
@@ -130,6 +132,8 @@ async function hydrateOperatorStation(set, get, uid) {
           station: profile?.station ?? null,
           serviceRadiusKm: profile?.serviceRadiusKm ?? null,
           approvalStatus: profile?.status ?? "pending",
+          phone: profile?.phone ?? state.currentOperator.phone ?? null,
+          displayName: profile?.displayName ?? profile?.name ?? state.currentOperator.displayName,
         }
       : state.currentOperator,
     accessApproved: approved,
@@ -299,6 +303,21 @@ export const usePoliceStore = create((set, get) => ({
       liveDataConnected: false,
       _unsubscribers: [],
     });
+  },
+
+  // Settings > Police Officer Profile "Save changes". Writes to the officer's own
+  // police_officers/{uid} doc and merges the result straight into currentOperator so the
+  // sidebar/topbar name updates immediately, without waiting on a Firestore round-trip.
+  updateOperatorProfile: async ({ name, phone }) => {
+    const uid = get().currentOperator?.uid;
+    if (!uid) throw new Error("Not signed in.");
+
+    await updatePoliceOfficerProfile(uid, { name, phone });
+    set((state) => ({
+      currentOperator: state.currentOperator
+        ? { ...state.currentOperator, displayName: name ?? state.currentOperator.displayName, phone: phone ?? state.currentOperator.phone }
+        : state.currentOperator,
+    }));
   },
 
   requestAccess: async (formData) => {
