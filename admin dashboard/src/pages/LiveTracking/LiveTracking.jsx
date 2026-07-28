@@ -45,6 +45,39 @@ function formatCoordinates(lat, lng) {
   return "Location unavailable";
 }
 
+function extractCoordinateValue(val1, val2, val3) {
+  for (const val of [val1, val2, val3]) {
+    if (typeof val === "number" && !isNaN(val)) return val;
+    if (typeof val === "string" && val.trim() !== "") {
+      const num = Number(val);
+      if (!isNaN(num)) return num;
+    }
+    if (typeof val === "function") {
+      const num = Number(val());
+      if (!isNaN(num)) return num;
+    }
+  }
+  return undefined;
+}
+
+function extractCoordinates(obj) {
+  if (!obj) return null;
+
+  let lat = extractCoordinateValue(obj.lat, obj.latitude, obj._lat);
+  let lng = extractCoordinateValue(obj.lng, obj.longitude, obj._long ?? obj._lng);
+
+  if (lat !== undefined && lng !== undefined) return { lat, lng };
+
+  const nested = obj.location || obj.coordinates || obj.position || obj.geopoint;
+  if (nested) {
+    lat = extractCoordinateValue(nested.lat, nested.latitude, nested._lat);
+    lng = extractCoordinateValue(nested.lng, nested.longitude, nested._long ?? nested._lng);
+    if (lat !== undefined && lng !== undefined) return { lat, lng };
+  }
+
+  return null;
+}
+
 export default function LiveTracking() {
   const { liveLocations, ambulances, drivers, emergencies, hospitals } = useOps();
   const [selectedLocationId, setSelectedLocationId] = useState(null);
@@ -89,44 +122,18 @@ export default function LiveTracking() {
           h.id === (ambulance?.hospitalId || location.hospitalId || driver?.hospitalId),
       );
 
-      const rawLat =
-        location.lat ??
-        location.latitude ??
-        location.location?.lat ??
-        location.location?.latitude ??
-        driver?.location?.latitude ??
-        driver?.location?.lat ??
-        emergency?.location?.latitude ??
-        emergency?.location?.lat;
+      const coords = extractCoordinates(location) || extractCoordinates(driver) || extractCoordinates(emergency);
 
-      const rawLng =
-        location.lng ??
-        location.longitude ??
-        location.location?.lng ??
-        location.location?.longitude ??
-        driver?.location?.longitude ??
-        driver?.location?.lng ??
-        emergency?.location?.longitude ??
-        emergency?.location?.lng;
+      const parsedLat = coords?.lat;
+      const parsedLng = coords?.lng;
 
-      const parsedLat =
-        typeof rawLat === "number" && !isNaN(rawLat)
-          ? rawLat
-          : typeof rawLat === "string" && rawLat.trim() !== "" && !isNaN(Number(rawLat))
-          ? Number(rawLat)
-          : undefined;
-
-      const parsedLng =
-        typeof rawLng === "number" && !isNaN(rawLng)
-          ? rawLng
-          : typeof rawLng === "string" && rawLng.trim() !== "" && !isNaN(Number(rawLng))
-          ? Number(rawLng)
-          : undefined;
+      const address = location.address || location.location?.address || driver?.address || driver?.location?.address || emergency?.address || emergency?.location?.address;
 
       return {
         ...location,
         lat: parsedLat,
         lng: parsedLng,
+        address,
         ambulance,
         driver,
         emergency,
@@ -261,20 +268,24 @@ export default function LiveTracking() {
                         key={item.id}
                         onClick={() => setSelectedLocationId(item.id)}
                         className={`cursor-pointer flex items-center justify-between rounded-md border p-3 text-xs transition ${selectedLocationId === item.id
-                            ? "border-slate-900 bg-slate-100"
-                            : "border-slate-200 bg-white hover:bg-slate-50"
+                          ? "border-slate-900 bg-slate-100"
+                          : "border-slate-200 bg-white hover:bg-slate-50"
                           }`}
                       >
                         <div>
                           <p className="font-semibold text-slate-900">{item.numberPlate}</p>
                           <p className="text-slate-500">{item.driverName} · {item.hospitalName}</p>
                         </div>
-                        <div className="text-right">
-                          <span className="font-mono text-slate-600">
+                        <div className="text-right flex flex-col items-end">
+                          <span className={`font-mono ${isValidCoordinate(item.lat, item.lng) ? "text-slate-600" : "text-amber-600 font-medium flex items-center gap-1"}`}>
+                            {!isValidCoordinate(item.lat, item.lng) && <AlertTriangle className="h-3 w-3" />}
                             {formatCoordinates(item.lat, item.lng)}
                           </span>
+                          {item.address && (
+                            <span className="text-slate-400 mt-0.5 truncate max-w-[120px]" title={item.address}>{item.address}</span>
+                          )}
                           {item.emergency && (
-                            <p className="font-medium text-red-600">{item.emergency.priority?.toUpperCase()} incident</p>
+                            <p className="font-medium text-red-600 mt-0.5">{item.emergency.priority?.toUpperCase()} incident</p>
                           )}
                         </div>
                       </div>
@@ -328,6 +339,9 @@ export default function LiveTracking() {
                         <div className="text-xs space-y-1 text-slate-600">
                           <p><strong className="text-slate-800">Driver:</strong> {selectedItem.driverName}</p>
                           <p><strong className="text-slate-800">Hospital:</strong> {selectedItem.hospitalName}</p>
+                          {selectedItem.address && (
+                            <p><strong className="text-slate-800">Location:</strong> {selectedItem.address}</p>
+                          )}
                           {selectedItem.emergency ? (
                             <div className="mt-1 rounded bg-red-50 p-1.5 text-red-800 border border-red-200">
                               <p className="font-semibold flex items-center gap-1">
@@ -369,8 +383,8 @@ export default function LiveTracking() {
                   <Card
                     key={item.id}
                     className={`transition-all border-l-4 ${item.emergency
-                        ? "border-l-red-500"
-                        : "border-l-emerald-500"
+                      ? "border-l-red-500"
+                      : "border-l-emerald-500"
                       } ${isSelected ? "ring-2 ring-slate-900 bg-slate-50/50" : ""}`}
                   >
                     <CardContent className="p-4 space-y-3">
@@ -421,19 +435,27 @@ export default function LiveTracking() {
                         )}
                       </div>
 
-                      <div className="flex items-center justify-between text-xs text-slate-400 pt-1 border-t border-slate-100">
-                        <span>
-                          {formatCoordinates(item.lat, item.lng)} · {formatDateTime(item.updatedAt)}
-                        </span>
-                        {isValidCoordinate(item.lat, item.lng) && (
-                          <a
-                            href={`https://www.google.com/maps?q=${item.lat},${item.lng}`}
-                            target="_blank"
-                            rel="noreferrer"
-                            className="inline-flex items-center gap-1 text-slate-600 hover:text-slate-900 font-medium"
-                          >
-                            Maps <ExternalLink className="h-3 w-3" />
-                          </a>
+                      <div className="flex flex-col text-xs text-slate-400 pt-2 border-t border-slate-100 space-y-1.5">
+                        <div className="flex items-center justify-between">
+                          <span className={isValidCoordinate(item.lat, item.lng) ? "" : "text-amber-600 font-medium flex items-center gap-1"}>
+                            {!isValidCoordinate(item.lat, item.lng) && <AlertTriangle className="h-3 w-3" />}
+                            {formatCoordinates(item.lat, item.lng)} · {formatDateTime(item.updatedAt)}
+                          </span>
+                          {isValidCoordinate(item.lat, item.lng) && (
+                            <a
+                              href={`https://www.google.com/maps?q=${item.lat},${item.lng}`}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="inline-flex items-center gap-1 text-slate-600 hover:text-slate-900 font-medium"
+                            >
+                              Maps <ExternalLink className="h-3 w-3" />
+                            </a>
+                          )}
+                        </div>
+                        {item.address && (
+                          <span className="text-slate-500 leading-tight">
+                            {item.address}
+                          </span>
                         )}
                       </div>
                     </CardContent>
