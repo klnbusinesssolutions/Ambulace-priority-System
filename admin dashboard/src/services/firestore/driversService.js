@@ -7,39 +7,42 @@ import {
 const drivers = createCollectionService(COLLECTIONS.drivers);
 
 /**
- * NOTE ON FIELD NAMES: the `drivers` collection in the schema doc uses
- * literal, spaced field names ("Hospital Name", "Name", "Email ID",
- * "Phone Number", "Role", "Gender", "City", "State", "Availability",
- * "Documents") instead of the camelCase used everywhere else in the
- * schema. We read/write the literal keys here (via bracket access) to stay
- * schema-accurate, and normalize to camelCase only for display in the UI.
- * Flagging this because it's inconsistent with the rest of the schema —
- * worth confirming with whoever owns the Android app before this ships.
+ * Normalizes raw Firestore driver document fields into standard camelCase schema
+ * supporting both spaced keys ("Name", "Hospital Name", etc.) and standard camelCase.
  */
-
-
-
-
 export function normalizeDriver(raw) {
   if (!raw) return raw;
+
+  const location =
+    raw.location ||
+    raw.coordinates ||
+    raw.lastLocation ||
+    raw.position ||
+    (raw.latitude && raw.longitude ? { latitude: Number(raw.latitude), longitude: Number(raw.longitude) } : null);
+
+  const latitude = Number(raw.latitude || raw.lat || location?.latitude || location?.lat || location?.y);
+  const longitude = Number(raw.longitude || raw.lng || location?.longitude || location?.lng || location?.x);
+
   return {
     id: raw.id,
-    hospitalId: raw.hospitalId,
-    hospitalName: raw["Hospital Name"],
-    name: raw["Name"],
-    email: raw["Email ID"],
-    phone: raw["Phone Number"],
-    role: raw["Role"],
-    gender: raw["Gender"],
-    city: raw["City"],
-    state: raw["State"],
-    availability: raw["Availability"],
-    documents: raw["Documents"],
-    location: raw.location,
-    tripStatus: raw.tripStatus,
-    tripCompletedAt: raw.tripCompletedAt,
-    tripStatusUpdatedAt: raw.tripStatusUpdatedAt,
-    updatedAt: raw.updatedAt,
+    hospitalId: raw.hospitalId || raw.hospital_id || raw["Hospital ID"],
+    hospitalName: raw["Hospital Name"] || raw.hospitalName || raw.hospital_name || "Hospital Network",
+    name: raw["Name"] || raw.name || raw.fullName || raw.driverName || "Driver",
+    email: raw["Email ID"] || raw.email || raw.emailId || "",
+    phone: raw["Phone Number"] || raw.phone || raw.phoneNumber || "",
+    role: raw["Role"] || raw.role || "Driver",
+    gender: raw["Gender"] || raw.gender || "",
+    city: raw["City"] || raw.city || "",
+    state: raw["State"] || raw.state || "",
+    availability: raw["Availability"] || raw.availability || "available",
+    documents: raw["Documents"] || raw.documents || {},
+    location,
+    latitude: !isNaN(latitude) ? latitude : undefined,
+    longitude: !isNaN(longitude) ? longitude : undefined,
+    tripStatus: raw.tripStatus || raw.trip_status || "idle",
+    tripCompletedAt: raw.tripCompletedAt || null,
+    tripStatusUpdatedAt: raw.tripStatusUpdatedAt || null,
+    updatedAt: raw.updatedAt || null,
     _raw: raw,
   };
 }
@@ -59,7 +62,7 @@ export async function listenToDriversByHospital(hospitalId, callback, onError) {
 }
 
 export async function updateDriverAvailability(driverId, availability) {
-  return drivers.update(driverId, { Availability: availability });
+  return drivers.update(driverId, { Availability: availability, availability });
 }
 
 export async function removeDriver(driverId) {

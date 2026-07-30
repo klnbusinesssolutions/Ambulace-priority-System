@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useRef, useState } from "react";
-import { ShieldCheck, XCircle, Copy, Check, Loader2 } from "lucide-react";
+import { useMemo, useState } from "react";
+import { ShieldCheck, XCircle, Loader2, CheckCircle2 } from "lucide-react";
 import DataTable from "../../components/ui/DataTable.jsx";
 import Input from "../../components/ui/Input.jsx";
 import Modal from "../../components/ui/Modal.jsx";
@@ -10,7 +10,7 @@ import { formatDateTime, matchesSearch } from "../../utils/formatters.js";
 import { VERIFICATION_STATUS } from "../../firebase/collections.js";
 
 export default function PendingPoliceOfficers() {
-  const { pendingPoliceOfficers, pendingPoliceOfficersActions } = useOps();
+  const { pendingPoliceOfficers = [], pendingPoliceOfficersActions } = useOps();
   const [query, setQuery] = useState("");
   const [selected, setSelected] = useState(null);
   const [modal, setModal] = useState(null);
@@ -20,9 +20,7 @@ export default function PendingPoliceOfficers() {
   const [radiusKm, setRadiusKm] = useState("8");
   const [reason, setReason] = useState("");
   const [approving, setApproving] = useState(false);
-  const [credential, setCredential] = useState(null);
-  const [copied, setCopied] = useState(false);
-  const unsubscribeCredentialRef = useRef(null);
+  const [toastMessage, setToastMessage] = useState("");
 
   const rows = useMemo(
     () =>
@@ -32,15 +30,9 @@ export default function PendingPoliceOfficers() {
     [pendingPoliceOfficers, query],
   );
 
-  useEffect(() => {
-    return () => unsubscribeCredentialRef.current?.();
-  }, []);
-
   function openApproveModal(request) {
     setSelected(request);
     setApproving(false);
-    setCredential(null);
-    setCopied(false);
     setStationName(request.station?.name || "");
     setStationLat(request.station?.lat != null ? String(request.station.lat) : "");
     setStationLng(request.station?.lng != null ? String(request.station.lng) : "");
@@ -55,6 +47,7 @@ export default function PendingPoliceOfficers() {
   }
 
   async function confirmApprove() {
+    if (!selected) return;
     setApproving(true);
 
     const overrides = {
@@ -66,19 +59,12 @@ export default function PendingPoliceOfficers() {
       serviceRadiusKm: radiusKm.trim() ? Number(radiusKm) : 8,
     };
 
-    const requestId = selected.id;
     try {
-      const generatedCred = await pendingPoliceOfficersActions.approve(selected, overrides);
-      if (generatedCred) {
-        setCredential(generatedCred);
-      }
-
-      unsubscribeCredentialRef.current = await pendingPoliceOfficersActions.watchCredentials(
-        requestId,
-        (doc) => {
-          if (doc) setCredential(doc);
-        },
-      );
+      await pendingPoliceOfficersActions.approve(selected, overrides);
+      setModal(null);
+      setSelected(null);
+      setToastMessage("Police Officer approved successfully.");
+      setTimeout(() => setToastMessage(""), 4000);
     } catch (err) {
       console.error("Failed to approve police officer:", err);
     } finally {
@@ -86,32 +72,33 @@ export default function PendingPoliceOfficers() {
     }
   }
 
-  function copyCredentials() {
-    if (!credential) return;
-    navigator.clipboard?.writeText(`Email: ${credential.email}\nTemporary password: ${credential.tempPassword}`);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
-  }
-
-  function closeApproveModal() {
-    unsubscribeCredentialRef.current?.();
-    unsubscribeCredentialRef.current = null;
-    setModal(null);
-  }
-
   async function confirmReject() {
-    await pendingPoliceOfficersActions.reject(selected, reason);
-    setModal(null);
+    if (!selected) return;
+    try {
+      await pendingPoliceOfficersActions.reject(selected, reason);
+      setModal(null);
+      setSelected(null);
+    } catch (err) {
+      console.error("Failed to reject police officer:", err);
+    }
   }
 
   return (
     <div className="space-y-5">
       <PageHeader
         title="Pending Police Officers"
-        description="Registration requests from the police dashboard (pending_police_officers). Approving one creates the officer's login automatically."
+        description="Review and approve registration requests submitted by police officers."
       />
 
-      <div className="rounded-lg border border-slate-200 bg-white p-4">
+      {/* Success Toast Banner */}
+      {toastMessage && (
+        <div className="flex items-center gap-3 rounded-lg border border-emerald-200 bg-emerald-50 p-4 text-emerald-900 dark:border-emerald-900/50 dark:bg-emerald-950/40 dark:text-emerald-200 transition-all">
+          <CheckCircle2 className="h-5 w-5 shrink-0 text-emerald-600 dark:text-emerald-400" />
+          <p className="text-sm font-medium">{toastMessage}</p>
+        </div>
+      )}
+
+      <div className="rounded-lg border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900">
         <Input
           placeholder="Search by name, badge ID, email..."
           value={query}
@@ -128,8 +115,8 @@ export default function PendingPoliceOfficers() {
             header: "Officer",
             render: (row) => (
               <div>
-                <p className="font-medium text-slate-950">{row.name}</p>
-                <p className="text-xs text-slate-500">{row.id}</p>
+                <p className="font-medium text-slate-950 dark:text-slate-100">{row.name}</p>
+                <p className="text-xs text-slate-500 dark:text-slate-400">{row.id}</p>
               </div>
             ),
           },
@@ -141,8 +128,8 @@ export default function PendingPoliceOfficers() {
             header: "Station",
             render: (row) => (
               <div>
-                <p className="text-slate-950">{row.station?.name || "-"}</p>
-                <p className="text-xs text-slate-500">
+                <p className="text-slate-950 dark:text-slate-100">{row.station?.name || "-"}</p>
+                <p className="text-xs text-slate-500 dark:text-slate-400">
                   {row.station?.lat && row.station?.lng
                     ? `${row.station.lat.toFixed(4)}, ${row.station.lng.toFixed(4)}`
                     : "No location captured"}
@@ -156,7 +143,7 @@ export default function PendingPoliceOfficers() {
             header: "",
             render: (row) => (
               <div className="flex flex-wrap justify-end gap-2">
-                <Button className="bg-emerald-600 hover:bg-emerald-700" onClick={() => openApproveModal(row)}>
+                <Button className="bg-emerald-600 hover:bg-emerald-700 dark:bg-emerald-600 dark:hover:bg-emerald-500 text-white" onClick={() => openApproveModal(row)}>
                   <ShieldCheck className="h-4 w-4" />
                   Approve
                 </Button>
@@ -170,114 +157,81 @@ export default function PendingPoliceOfficers() {
         ]}
       />
 
+      {/* APPROVE MODAL */}
       <Modal
         open={modal === "approve"}
-        title="Approve police officer"
+        title="Approve Police Officer"
         description={selected ? `${selected.name} · Badge ${selected.badgeId}` : ""}
-        onClose={closeApproveModal}
+        onClose={() => setModal(null)}
         footer={
-          credential ? (
-            <Button className="bg-emerald-600 hover:bg-emerald-700" onClick={closeApproveModal}>
-              Done
+          <>
+            <Button variant="secondary" onClick={() => setModal(null)} disabled={approving}>
+              Cancel
             </Button>
-          ) : (
-            <>
-              <Button variant="secondary" onClick={closeApproveModal} disabled={approving}>
-                Cancel
-              </Button>
-              <Button className="bg-emerald-600 hover:bg-emerald-700" onClick={confirmApprove} disabled={approving}>
-                {approving ? (
-                  <>
-                    <Loader2 className="h-4 w-4 animate-spin" /> Approving...
-                  </>
-                ) : (
-                  "Approve & create login"
-                )}
-              </Button>
-            </>
-          )
+            <Button className="bg-emerald-600 hover:bg-emerald-700 text-white" onClick={confirmApprove} disabled={approving}>
+              {approving ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin" /> Approving...
+                </>
+              ) : (
+                "Approve Police Officer"
+              )}
+            </Button>
+          </>
         }
       >
-        {credential ? (
-          <div className="space-y-3 text-sm">
-            <p className="flex items-center gap-2 text-emerald-700">
-              <ShieldCheck className="h-4 w-4" /> Account created. Share these credentials with the officer securely
-              - they'll be asked to change the password on first login.
-            </p>
-            <div className="space-y-2 rounded-lg border border-slate-200 bg-slate-50 p-3">
-              <div>
-                <p className="text-xs font-medium uppercase tracking-wide text-slate-500">Email</p>
-                <p className="font-medium text-slate-900">{credential.email}</p>
-              </div>
-              <div>
-                <p className="text-xs font-medium uppercase tracking-wide text-slate-500">Temporary password</p>
-                <p className="font-mono font-medium text-slate-900">{credential.tempPassword}</p>
-              </div>
-            </div>
-            <Button variant="secondary" onClick={copyCredentials} className="w-full">
-              {copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
-              {copied ? "Copied" : "Copy email + password"}
-            </Button>
+        <div className="space-y-4 text-sm">
+          <p className="text-xs text-slate-600 dark:text-slate-400">
+            Approving this request will activate the officer's account using the credentials created during registration.
+          </p>
+
+          <div className="grid grid-cols-2 gap-3">
+            <label className="col-span-2 block font-medium text-slate-700 dark:text-slate-300">
+              Station name
+              <Input
+                value={stationName}
+                onChange={(event) => setStationName(event.target.value)}
+                className="mt-1"
+                disabled={approving}
+              />
+            </label>
+            <label className="block font-medium text-slate-700 dark:text-slate-300">
+              Latitude
+              <Input
+                value={stationLat}
+                onChange={(event) => setStationLat(event.target.value)}
+                placeholder="e.g. 18.5019"
+                className="mt-1"
+                disabled={approving}
+              />
+            </label>
+            <label className="block font-medium text-slate-700 dark:text-slate-300">
+              Longitude
+              <Input
+                value={stationLng}
+                onChange={(event) => setStationLng(event.target.value)}
+                placeholder="e.g. 73.8636"
+                className="mt-1"
+                disabled={approving}
+              />
+            </label>
+            <label className="col-span-2 block font-medium text-slate-700 dark:text-slate-300">
+              Patrol radius (km)
+              <Input
+                value={radiusKm}
+                onChange={(event) => setRadiusKm(event.target.value)}
+                className="mt-1"
+                disabled={approving}
+              />
+            </label>
           </div>
-        ) : (
-          <div className="space-y-3 text-sm">
-            {approving && (
-              <p className="flex items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-slate-600">
-                <Loader2 className="h-4 w-4 animate-spin" /> Creating the account and generating a temporary
-                password - this usually takes a few seconds.
-              </p>
-            )}
-            <div className="grid grid-cols-2 gap-3">
-              <label className="col-span-2 block font-medium text-slate-700">
-                Station name
-                <Input
-                  value={stationName}
-                  onChange={(event) => setStationName(event.target.value)}
-                  className="mt-1"
-                  disabled={approving}
-                />
-              </label>
-              <label className="block font-medium text-slate-700">
-                Latitude
-                <Input
-                  value={stationLat}
-                  onChange={(event) => setStationLat(event.target.value)}
-                  placeholder="e.g. 18.5019"
-                  className="mt-1"
-                  disabled={approving}
-                />
-              </label>
-              <label className="block font-medium text-slate-700">
-                Longitude
-                <Input
-                  value={stationLng}
-                  onChange={(event) => setStationLng(event.target.value)}
-                  placeholder="e.g. 73.8636"
-                  className="mt-1"
-                  disabled={approving}
-                />
-              </label>
-              <label className="col-span-2 block font-medium text-slate-700">
-                Patrol radius (km)
-                <Input
-                  value={radiusKm}
-                  onChange={(event) => setRadiusKm(event.target.value)}
-                  className="mt-1"
-                  disabled={approving}
-                />
-              </label>
-            </div>
-            <p className="text-xs text-slate-500">
-              Pre-filled from what the officer's browser captured at registration - correct it here if they weren't
-              actually at the station, or if location permission was denied.
-            </p>
-          </div>
-        )}
+        </div>
       </Modal>
 
+      {/* REJECT MODAL */}
       <Modal
         open={modal === "reject"}
-        title="Reject request"
+        title="Reject Request"
         description={selected ? `${selected.name} · Badge ${selected.badgeId}` : ""}
         onClose={() => setModal(null)}
         footer={
@@ -286,18 +240,18 @@ export default function PendingPoliceOfficers() {
               Cancel
             </Button>
             <Button variant="danger" onClick={confirmReject}>
-              Confirm rejection
+              Confirm Rejection
             </Button>
           </>
         }
       >
-        <label className="block text-sm font-medium text-slate-700">
-          Reason
+        <label className="block text-sm font-medium text-slate-700 dark:text-slate-300">
+          Reason for Rejection
           <textarea
             value={reason}
             onChange={(event) => setReason(event.target.value)}
             rows={4}
-            className="mt-2 w-full rounded-md border border-slate-200 px-3 py-2 text-sm outline-none focus:border-slate-400"
+            className="mt-2 w-full rounded-md border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-950 dark:text-slate-100 px-3 py-2 text-sm outline-none focus:border-slate-400"
             placeholder="Explain why this request was rejected..."
           />
         </label>

@@ -1,69 +1,193 @@
-import { Clock3, MapPin, Navigation2 } from "lucide-react";
+import {
+  Ambulance,
+  Building2,
+  CheckCircle2,
+  Clock,
+  MapPin,
+  User,
+  ShieldCheck,
+} from "lucide-react";
 import { Card, CardContent } from "../ui/Card.jsx";
-import StatusBadge from "../ui/StatusBadge.jsx";
 import Select from "../ui/Select.jsx";
+import StatusBadge from "../ui/StatusBadge.jsx";
+import { formatTimeAgo } from "../../utils/formatters.js";
 
 const statusOptions = ["active", "dispatched", "arrived", "completed", "resolved"];
 
-const priorityLabels = { critical: "Critical", high: "High", medium: "Medium", low: "Info" };
-const statusLabels = { active: "Warning", dispatched: "Dispatched", arrived: "En Route", completed: "Approved", resolved: "Operational" };
+const priorityLabels = {
+  critical: "Critical",
+  high: "High",
+  medium: "Medium",
+  low: "Low",
+};
 
-export default function EmergencyCards({ rows, onStatusChange }) {
+const priorityAccents = {
+  critical: "border-l-red-600 dark:border-l-red-500",
+  high: "border-l-amber-600 dark:border-l-amber-500",
+  medium: "border-l-blue-600 dark:border-l-blue-500",
+  low: "border-l-emerald-600 dark:border-l-emerald-500",
+};
+
+const timelineStages = [
+  { key: "active", label: "Reported" },
+  { key: "dispatched", label: "Assigned" },
+  { key: "arrived", label: "En Route" },
+  { key: "completed", label: "Arrived" },
+  { key: "resolved", label: "Completed" },
+];
+
+export default function EmergencyCards({ rows = [], onStatusChange, onCardClick }) {
   if (!rows.length) {
     return (
-      <div className="rounded-lg border border-dashed border-slate-300 bg-white p-10 text-center text-sm text-slate-500">
-        No emergencies match this view.
+      <div className="rounded-xl border border-dashed border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-900 p-12 text-center text-sm text-slate-500 dark:text-slate-400">
+        No emergencies match this active view.
       </div>
     );
   }
 
   return (
     <div className="grid gap-4 lg:grid-cols-2">
-      {rows.map((item) => (
-        <Card key={item.id}>
-          <CardContent className="space-y-4 p-5">
-            <div className="flex items-start justify-between gap-4">
-              <div>
-                <div className="flex flex-wrap items-center gap-2">
-                  <h2 className="text-base font-semibold text-slate-950">{item.id}</h2>
-                  <StatusBadge status={priorityLabels[item.priority] || item.priority} />
+      {rows.map((item) => {
+        const priorityKey = (item.priority || "critical").toLowerCase();
+        const accentClass = priorityAccents[priorityKey] || priorityAccents.medium;
+        const incidentType = item.incidentType || "Emergency Incident";
+        const patientName = item.patientName || item.patient || "Anonymous Patient";
+        const hospName = item.hospitalName || item.hospitalId || "Assigned Hospital";
+        const ambName = item.ambulanceId || "Unit Pending";
+        const drvName = item.driverName || "Driver Assigned";
+        const timeAgo = formatTimeAgo(item.createdAt || item.startTime || item.timestamp);
+        const updatedAgo = formatTimeAgo(item.updatedAt || item.createdAt || item.timestamp);
+
+        // Calculate timeline step index
+        const currentStageIdx = timelineStages.findIndex((s) => s.key === item.status);
+        const activeIdx = currentStageIdx >= 0 ? currentStageIdx : 1;
+
+        return (
+          <Card
+            key={item.id}
+            className={`border-l-4 transition-all hover:shadow-md cursor-pointer ${accentClass}`}
+            onClick={(e) => onCardClick?.(item, e)}
+          >
+            <CardContent className="space-y-4 p-5">
+              {/* 1. Header: Incident Type + Priority Badge + Status Select */}
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <h2 className="text-base font-bold text-slate-900 dark:text-slate-100">
+                      {incidentType}
+                    </h2>
+                    <StatusBadge status={priorityLabels[priorityKey] || item.priority} />
+                  </div>
+                  <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                    Reported {timeAgo} · Updated {updatedAgo}
+                  </p>
                 </div>
-                <p className="mt-1 text-sm text-slate-500">{item.incidentType} · {item.patientName}</p>
+                <div onClick={(e) => e.stopPropagation()} className="shrink-0">
+                  <Select
+                    className="h-8 w-36 text-xs"
+                    value={item.status || "dispatched"}
+                    onChange={(event) => onStatusChange(item.id, event.target.value)}
+                    options={statusOptions}
+                  />
+                </div>
               </div>
-              <Select
-                className="w-40"
-                value={item.status}
-                onChange={(event) => onStatusChange(item.id, event.target.value)}
-                options={statusOptions}
-              />
-            </div>
-            <div className="grid gap-3 text-sm sm:grid-cols-2">
-              <div className="flex items-center gap-2 text-slate-600">
-                <MapPin className="h-4 w-4 text-slate-400" />
-                {item.location ? `${item.location.latitude?.toFixed(3)}, ${item.location.longitude?.toFixed(3)}` : "Location pending"}
+
+              {/* 2. Compact Operational Stage Progress Timeline */}
+              <div className="rounded-lg border border-slate-100 dark:border-slate-800/80 bg-slate-50/70 dark:bg-slate-800/40 p-2.5">
+                <div className="flex items-center justify-between gap-1">
+                  {timelineStages.map((stage, idx) => {
+                    const isPassed = idx <= activeIdx;
+                    const isCurrent = idx === activeIdx;
+
+                    return (
+                      <div key={stage.key} className="flex flex-1 flex-col items-center text-center">
+                        <div className="flex items-center w-full">
+                          {idx > 0 && (
+                            <div
+                              className={`h-0.5 flex-1 ${
+                                isPassed ? "bg-blue-600 dark:bg-blue-500" : "bg-slate-200 dark:bg-slate-700"
+                              }`}
+                            />
+                          )}
+                          <div
+                            className={`grid h-5 w-5 shrink-0 place-items-center rounded-full text-[10px] font-bold ${
+                              isCurrent
+                                ? "bg-blue-600 text-white ring-2 ring-blue-100 dark:ring-blue-900"
+                                : isPassed
+                                ? "bg-blue-500 text-white"
+                                : "bg-slate-200 dark:bg-slate-700 text-slate-500 dark:text-slate-400"
+                            }`}
+                          >
+                            {isPassed ? <CheckCircle2 className="h-3 w-3" /> : idx + 1}
+                          </div>
+                          {idx < timelineStages.length - 1 && (
+                            <div
+                              className={`h-0.5 flex-1 ${
+                                idx < activeIdx ? "bg-blue-600 dark:bg-blue-500" : "bg-slate-200 dark:bg-slate-700"
+                              }`}
+                            />
+                          )}
+                        </div>
+                        <span
+                          className={`mt-1 text-[10px] font-medium truncate max-w-[64px] ${
+                            isCurrent
+                              ? "text-blue-600 dark:text-blue-400 font-bold"
+                              : isPassed
+                              ? "text-slate-700 dark:text-slate-300"
+                              : "text-slate-400 dark:text-slate-500"
+                          }`}
+                        >
+                          {stage.label}
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
               </div>
-              <div className="flex items-center gap-2 text-slate-600">
-                <Clock3 className="h-4 w-4 text-slate-400" />
-                ETA {item.eta || "—"}
+
+              {/* 3. Operational Grid Details */}
+              <div className="grid gap-3 text-xs sm:grid-cols-2">
+                <div className="flex items-center gap-2 text-slate-700 dark:text-slate-300">
+                  <User className="h-4 w-4 text-slate-400 shrink-0" />
+                  <span className="truncate">
+                    <span className="font-semibold text-slate-900 dark:text-slate-100">Patient:</span> {patientName}
+                  </span>
+                </div>
+
+                <div className="flex items-center gap-2 text-slate-700 dark:text-slate-300">
+                  <Clock className="h-4 w-4 text-amber-500 shrink-0" />
+                  <span className="truncate">
+                    <span className="font-semibold text-slate-900 dark:text-slate-100">ETA:</span> {item.eta || "4 mins"}
+                  </span>
+                </div>
+
+                <div className="flex items-center gap-2 text-slate-700 dark:text-slate-300">
+                  <Ambulance className="h-4 w-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
+                  <span className="truncate">
+                    <span className="font-semibold text-slate-900 dark:text-slate-100">Ambulance:</span> {ambName} ({drvName})
+                  </span>
+                </div>
+
+                <div className="flex items-center gap-2 text-slate-700 dark:text-slate-300">
+                  <Building2 className="h-4 w-4 text-blue-600 dark:text-blue-400 shrink-0" />
+                  <span className="truncate">
+                    <span className="font-semibold text-slate-900 dark:text-slate-100">Hospital:</span> {hospName}
+                  </span>
+                </div>
+
+                <div className="sm:col-span-2 flex items-center gap-2 text-slate-600 dark:text-slate-400">
+                  <MapPin className="h-4 w-4 text-red-500 shrink-0" />
+                  <span className="truncate font-mono">
+                    {item.location
+                      ? `${item.location.latitude?.toFixed(4)}, ${item.location.longitude?.toFixed(4)}`
+                      : item.address || "GPS Location Active"}
+                  </span>
+                </div>
               </div>
-              <div>
-                <p className="text-xs text-slate-500">Ambulance / Driver</p>
-                <p className="font-medium text-slate-950">{item.ambulanceId} · {item.driverName}</p>
-              </div>
-              <div>
-                <p className="text-xs text-slate-500">Hospital</p>
-                <p className="font-medium text-slate-950">{item.hospitalId}</p>
-              </div>
-            </div>
-            {item.status === "dispatched" && (
-              <div className="flex items-center gap-2 rounded-md bg-slate-50 px-3 py-2 text-xs text-slate-500">
-                <Navigation2 className="h-3.5 w-3.5" />
-                Live position tracked on the Live Tracking page.
-              </div>
-            )}
-          </CardContent>
-        </Card>
-      ))}
+            </CardContent>
+          </Card>
+        );
+      })}
     </div>
   );
 }

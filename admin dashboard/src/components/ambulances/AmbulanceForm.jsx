@@ -70,7 +70,15 @@ export default function AmbulanceForm({ value, onChange, hospitals = [], errors 
         label="Hospital *"
         value={value.hospitalId}
         onChange={(event) => update("hospitalId", event.target.value)}
-        options={[{ label: "Select Hospital...", value: "" }, ...hospitals.map((item) => ({ label: item.name, value: item.hospitalId }))]}
+        options={[
+          { label: "Select Hospital...", value: "" },
+          ...hospitals
+            .filter((item) => item && (item.hospitalId || item.id))
+            .map((item) => ({
+              label: item.name || item.hospitalName || item.hospitalId || item.id,
+              value: item.hospitalId || item.id || "",
+            })),
+        ]}
         error={errors.hospitalId}
       />
       <Select

@@ -3,10 +3,11 @@ import Button from "../ui/Button.jsx";
 import DataTable from "../ui/DataTable.jsx";
 import StatusBadge from "../ui/StatusBadge.jsx";
 
-export default function HospitalsTable({ rows, onEdit, onDelete }) {
+export default function HospitalsTable({ rows, onEdit, onDelete, ...props }) {
   return (
     <DataTable
       rows={rows}
+      {...props}
       emptyTitle="No hospitals match this view"
       columns={[
         {
@@ -31,11 +32,27 @@ export default function HospitalsTable({ rows, onEdit, onDelete }) {
           key: "actions",
           header: "",
           render: (row) => (
-            <div className="flex justify-end gap-1">
-              <Button variant="ghost" size="icon" onClick={() => onEdit(row)} aria-label={`Edit ${row.name}`}>
+            <div className="flex justify-end gap-1" onClick={(e) => e.stopPropagation()}>
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onEdit(row);
+                }}
+                aria-label={`Edit ${row.name}`}
+              >
                 <Edit3 className="h-4 w-4" />
               </Button>
-              <Button variant="ghost" size="icon" onClick={() => onDelete(row)} aria-label={`Delete ${row.name}`}>
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onDelete(row);
+                }}
+                aria-label={`Delete ${row.name}`}
+              >
                 <Trash2 className="h-4 w-4" />
               </Button>
             </div>

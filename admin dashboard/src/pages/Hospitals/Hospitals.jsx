@@ -1,6 +1,7 @@
 import { Plus } from "lucide-react";
 import { useMemo, useState } from "react";
 import HospitalForm, { hospitalDefaults, getNextHospitalId } from "../../components/hospitals/HospitalForm.jsx";
+import HospitalDetailsDrawer from "../../components/hospitals/HospitalDetailsDrawer.jsx";
 import { validateHospitalForm } from "../../utils/hospitalValidation.js";
 import HospitalsTable from "../../components/hospitals/HospitalsTable.jsx";
 import Button from "../../components/ui/Button.jsx";
@@ -10,9 +11,11 @@ import PageHeader from "../../components/ui/PageHeader.jsx";
 import Select from "../../components/ui/Select.jsx";
 import { useOps } from "../../context/OpsContext.jsx";
 import { matchesSearch } from "../../utils/formatters.js";
+import { useOverlay } from "../../context/OverlayContext.jsx";
 
 export default function Hospitals() {
   const { hospitals, hospitalsActions } = useOps();
+  const { openDrawer } = useOverlay();
   const [query, setQuery] = useState("");
   const [status, setStatus] = useState("All statuses");
   const [modal, setModal] = useState(null);
@@ -42,7 +45,14 @@ export default function Hospitals() {
   }
 
   function openEdit(record) {
-    setDraft(record);
+    setDraft({
+      ...hospitalDefaults,
+      ...record,
+      location: record.location || record.address || "",
+      address: record.address || record.location || "",
+      latitude: typeof record.latitude === "number" ? record.latitude : null,
+      longitude: typeof record.longitude === "number" ? record.longitude : null,
+    });
     setErrorMsg("");
     setFieldErrors({});
     setModal("edit");
@@ -86,7 +96,15 @@ export default function Hospitals() {
         <Input placeholder="Search hospitals..." value={query} onChange={(event) => setQuery(event.target.value)} />
         <Select className="sm:w-52" value={status} onChange={(event) => setStatus(event.target.value)} options={["All statuses", "Active", "Inactive"]} />
       </div>
-      <HospitalsTable rows={rows} onEdit={openEdit} onDelete={(record) => { setDraft(record); setModal("delete"); }} />
+      <HospitalsTable
+        rows={rows}
+        onEdit={openEdit}
+        onDelete={(record) => {
+          setDraft(record);
+          setModal("delete");
+        }}
+        onRowClick={(hospital) => openDrawer({ type: "hospital", item: hospital })}
+      />
 
       <Modal
         open={modal === "add" || modal === "edit"}

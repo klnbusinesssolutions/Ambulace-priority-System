@@ -48,5 +48,18 @@ export function validateHospitalForm(data, isEdit = false) {
     }
   }
 
+  const locStr = (data.location || data.address || "").trim();
+  if (!locStr) {
+    errors.location = "Hospital location is required.";
+  } else if (
+    typeof data.latitude !== "number" ||
+    isNaN(data.latitude) ||
+    typeof data.longitude !== "number" ||
+    isNaN(data.longitude)
+  ) {
+    errors.location =
+      "Please select a location from the Google Places suggestions to automatically fetch latitude and longitude.";
+  }
+
   return errors;
 }

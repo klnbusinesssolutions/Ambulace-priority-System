@@ -1,7 +1,8 @@
 import { createContext, useContext, useEffect, useMemo, useState } from "react";
 import { hasFirebaseConfig } from "../firebase/client.js";
-import { VERIFICATION_STATUS } from "../firebase/collections.js";
+import { VERIFICATION_STATUS, NOTIFICATION_TYPES } from "../firebase/collections.js";
 import { useAuth } from "./AuthContext.jsx";
+import { applyTheme, applyAnimations, applyCompactMode } from "../utils/theme.js";
 
 import { listenToAmbulances } from "../services/firestore/ambulancesService.js";
 
@@ -27,7 +28,7 @@ import {
 } from "../services/firestore/pendingAmbulancesService.js";
 import { listenToEmergencies, updateEmergencyStatus } from "../services/firestore/emergenciesService.js";
 import { listenToLiveLocations } from "../services/firestore/liveLocationsService.js";
-import { listenToNotifications, markNotificationRead } from "../services/firestore/notificationsService.js";
+import { listenToNotifications, markNotificationRead, createNotification, syncAndCleanupStaleNotifications } from "../services/firestore/notificationsService.js";
 import { listenToActivityLogs } from "../services/firestore/activityLogService.js";
 import { listenToAnalytics, createAnalyticsRecord, removeAnalyticsRecord } from "../services/firestore/analyticsService.js";
 import {
@@ -35,8 +36,12 @@ import {
   approvePendingPoliceOfficer,
   rejectPendingPoliceOfficer,
   requestPoliceOfficerResubmission,
-  listenToPoliceTempCredential,
 } from "../services/firestore/policeOfficersService.js";
+import {
+  calculateApprovalBreakdown,
+  calculateVerificationTrend,
+  calculateKPIStats,
+} from "../utils/analyticsAggregator.js";
 import {
   demoHospitals,
   demoDrivers,
@@ -52,6 +57,37 @@ import {
   systemPanels,
   verificationTrend,
 } from "../services/mockData.js";
+
+const STORAGE_KEY = "ambugrid_settings";
+
+function getInitialSettings(admin) {
+  const defaults = {
+    adminName: admin?.displayName || "Super Admin",
+    email: admin?.email || "admin@ambugrid.com",
+    role: "Super Admin",
+    theme: "System Default",
+    enableAnimations: true,
+    compactMode: false,
+    notifications: true,
+    criticalOnly: false,
+    dispatchMode: "Balanced",
+    timezone: "Asia/Calcutta",
+    language: "English",
+    dateFormat: "DD/MM/YYYY",
+    timeFormat: "12-hour",
+    sessionTimeout: "30 Minutes",
+  };
+
+  try {
+    const saved = localStorage.getItem(STORAGE_KEY);
+    if (saved) {
+      return { ...defaults, ...JSON.parse(saved) };
+    }
+  } catch (e) {
+    console.error("Failed to load settings from localStorage:", e);
+  }
+  return defaults;
+}
 
 const OpsContext = createContext(null);
 const firebaseReady = hasFirebaseConfig();
@@ -100,22 +136,69 @@ export function OpsProvider({ children }) {
   const [analytics] = useLiveCollection(listenToAnalytics, demoAnalytics);
   const [pendingPoliceOfficers] = useLiveCollection(listenToPendingPoliceOfficers, demoPendingPoliceOfficers);
 
-  const [settings, setSettings] = useState({
-    adminName: admin?.displayName || "Super Admin",
-    email: admin?.email || "admin@ambugrid.com",
-    role: "Super Admin",
-    notifications: true,
-    criticalOnly: false,
-    timezone: "Asia/Calcutta",
-    dispatchMode: "Balanced",
-  });
+  const [settings, setSettingsState] = useState(() => getInitialSettings(admin));
+
+  useEffect(() => {
+    applyTheme(settings.theme);
+  }, [settings.theme]);
+
+  useEffect(() => {
+    applyAnimations(settings.enableAnimations);
+  }, [settings.enableAnimations]);
+
+  useEffect(() => {
+    applyCompactMode(settings.compactMode);
+  }, [settings.compactMode]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const mediaQuery = window.matchMedia("(prefers-color-scheme: dark)");
+    const handleChange = () => {
+      if (settings.theme === "System Default") {
+        applyTheme("System Default");
+      }
+    };
+    mediaQuery.addEventListener("change", handleChange);
+    return () => mediaQuery.removeEventListener("change", handleChange);
+  }, [settings.theme]);
+
+  useEffect(() => {
+    if (!firebaseReady) return;
+    const activePendingTargetIds = new Set([
+      ...(pendingDrivers || []).map((d) => d.id),
+      ...(pendingAmbulances || []).map((a) => a.id),
+      ...(pendingPoliceOfficers || []).map((p) => p.id),
+      ...(hospitals || []).filter((h) => h.status === "pending" || h.isPending).map((h) => h.id || h.hospitalId),
+    ]);
+
+    syncAndCleanupStaleNotifications(activePendingTargetIds);
+  }, [pendingDrivers, pendingAmbulances, pendingPoliceOfficers, hospitals]);
 
 
 
   const hospitalsActions = {
-    add: (record) => createHospital(record.hospitalId, record),
-    update: (id, patch) => updateHospital(id, patch),
-    remove: (id) => removeHospital(id),
+    add: async (record) => {
+      const created = await createHospital(record.hospitalId, record);
+      if (!firebaseReady) {
+        setHospitals((prev) => [
+          { ...record, id: record.hospitalId, isActive: true, status: "approved", createdAt: new Date().toISOString() },
+          ...prev,
+        ]);
+      }
+      return created;
+    },
+    update: async (id, patch) => {
+      await updateHospital(id, patch);
+      if (!firebaseReady) {
+        setHospitals((prev) => prev.map((h) => (h.hospitalId === id || h.id === id ? { ...h, ...patch } : h)));
+      }
+    },
+    remove: async (id) => {
+      await removeHospital(id);
+      if (!firebaseReady) {
+        setHospitals((prev) => prev.filter((h) => h.hospitalId !== id && h.id !== id));
+      }
+    },
   };
 
   const driversActions = {
@@ -124,7 +207,29 @@ export function OpsProvider({ children }) {
   };
 
   const pendingDriversActions = {
-    approve: (driver) => approvePendingDriver(driver),
+    approve: async (driver) => {
+      const approvedData = await approvePendingDriver(driver);
+      if (!firebaseReady) {
+        setPendingDrivers((prev) => prev.filter((d) => d.id !== driver.id));
+        setDrivers((prev) => [
+          ...prev.filter((d) => d.id !== driver.id),
+          {
+            id: driver.id,
+            name: driver.fullName || driver.driverName || "Driver",
+            email: driver.email || "",
+            phone: driver.phone || "",
+            hospitalId: driver.hospitalId || "",
+            hospitalName: driver.hospitalName || "",
+            licenseNumber: driver.licenseNumber || "",
+            availability: "available",
+            tripStatus: "standby",
+            isActive: true,
+            approvedAt: new Date().toISOString(),
+          },
+        ]);
+      }
+      return approvedData;
+    },
     reject: async (driver, reason) => {
       const rejectedData = await rejectPendingDriver(driver, reason);
       if (!firebaseReady) {
@@ -140,7 +245,6 @@ export function OpsProvider({ children }) {
       }
     },
   };
-
 
   const pendingAmbulancesActions = {
     add: (record) => createAmbulance(record),
@@ -174,7 +278,14 @@ export function OpsProvider({ children }) {
   };
 
   const emergenciesActions = {
-    updateStatus: (id, status) => updateEmergencyStatus(id, status),
+    updateStatus: async (id, status) => {
+      await updateEmergencyStatus(id, status);
+      if (!firebaseReady) {
+        setEmergencies((prev) =>
+          prev.map((e) => (e.id === id ? { ...e, status, updatedAt: new Date().toISOString() } : e))
+        );
+      }
+    },
   };
 
   const notificationsActions = {
@@ -188,7 +299,15 @@ export function OpsProvider({ children }) {
   };
 
   const pendingPoliceOfficersActions = {
-    approve: (request, overrides) => approvePendingPoliceOfficer(request, overrides),
+    approve: async (request, overrides) => {
+      const approvedData = await approvePendingPoliceOfficer(request, overrides);
+      if (!firebaseReady) {
+        setPendingPoliceOfficers((prev) =>
+          prev.map((p) => (p.id === request.id ? { ...p, status: VERIFICATION_STATUS.approved, approvedAt: new Date().toISOString() } : p))
+        );
+      }
+      return approvedData;
+    },
     reject: async (request, reason) => {
       const rejectedData = await rejectPendingPoliceOfficer(request, reason);
       if (!firebaseReady) {
@@ -205,10 +324,7 @@ export function OpsProvider({ children }) {
       }
       return resubmitData;
     },
-    watchCredentials: (requestId, callback, onError) =>
-      listenToPoliceTempCredential(requestId, callback, onError),
   };
-
 
   const analyticsActions = {
     add: (record) => createAnalyticsRecord(record),
@@ -216,129 +332,105 @@ export function OpsProvider({ children }) {
   };
 
   const value = useMemo(() => {
-    const pendingDriverRequests = pendingDrivers.filter((driver) => driver.status === VERIFICATION_STATUS.pending).length;
-    const pendingAmbulanceRequests = pendingAmbulances.filter((unit) => unit.status === VERIFICATION_STATUS.pending).length;
+    const kpi = calculateKPIStats({
+      hospitals,
+      drivers,
+      pendingDrivers,
+      ambulances,
+      pendingAmbulances,
+      pendingPoliceOfficers,
+      rejectedRequestsCollection,
+      emergencies,
+    });
 
-    const allRejectedIds = new Set([
-      ...(rejectedRequestsCollection || []).map((item) => item.id),
-      ...pendingDrivers.filter((driver) => driver.status === VERIFICATION_STATUS.rejected).map((d) => d.id),
-      ...pendingAmbulances.filter((unit) => unit.status === VERIFICATION_STATUS.rejected).map((u) => u.id),
-      ...pendingPoliceOfficers.filter((officer) => officer.status === VERIFICATION_STATUS.rejected).map((o) => o.id),
-    ]);
-    const rejectedRequests = allRejectedIds.size;
+    const breakdown = calculateApprovalBreakdown({
+      hospitals,
+      drivers,
+      pendingDrivers,
+      ambulances,
+      pendingAmbulances,
+      pendingPoliceOfficers,
+      rejectedRequestsCollection,
+    });
 
-    const resubmissionRequests =
-      pendingDrivers.filter((driver) => driver.status === VERIFICATION_STATUS.resubmissionRequired).length +
-      pendingAmbulances.filter((unit) => unit.status === VERIFICATION_STATUS.resubmissionRequired).length +
-      pendingPoliceOfficers.filter((officer) => officer.status === VERIFICATION_STATUS.resubmissionRequired).length;
-    const activeEmergencies = emergencies.filter((item) => !["completed", "resolved"].includes(item.status));
-    const pendingPoliceRequests = pendingPoliceOfficers.filter(
-  (officer) => officer.status === VERIFICATION_STATUS.pending
-).length;
+    const trend = calculateVerificationTrend({
+      hospitals,
+      drivers,
+      pendingDrivers,
+      ambulances,
+      pendingAmbulances,
+      pendingPoliceOfficers,
+      rejectedRequestsCollection,
+      daysCount: 7,
+    });
+
+    const activeEmergencies = (emergencies || []).filter((item) =>
+      ["active", "dispatched", "arrived", "in_progress"].includes(item.status)
+    );
+
     return {
       overviewStats: [
         {
           label: "Pending Driver Requests",
-          value: String(pendingDriverRequests),
+          value: String(kpi.pendingDriverRequests),
           detail: "pending_drivers · status: pending",
-          trend: pendingDriverRequests ? "needs action" : "clear",
-          tone: pendingDriverRequests ? "warning" : "success",
+          trend: kpi.pendingDriverRequests ? "needs action" : "clear",
+          tone: kpi.pendingDriverRequests ? "warning" : "success",
         },
         {
           label: "Pending Ambulance Requests",
-          value: String(pendingAmbulanceRequests),
+          value: String(kpi.pendingAmbulanceRequests),
           detail: "pending_ambulances · status: pending",
-          trend: pendingAmbulanceRequests ? "needs action" : "clear",
-          tone: pendingAmbulanceRequests ? "warning" : "success",
+          trend: kpi.pendingAmbulanceRequests ? "needs action" : "clear",
+          tone: kpi.pendingAmbulanceRequests ? "warning" : "success",
         },
         {
           label: "Operational Drivers",
-          value: String(drivers.length),
+          value: String(kpi.operationalDriversCount),
           detail: "drivers collection (Android app)",
           trend: "login enabled",
           tone: "success",
         },
         {
-  label: "Pending Police Officers",
-  value: String(pendingPoliceRequests),
-  detail: "pending_police_officers · status: pending",
-  trend: pendingPoliceRequests ? "needs action" : "clear",
-  tone: pendingPoliceRequests ? "warning" : "success",
-},
+          label: "Pending Police Officers",
+          value: String(kpi.pendingPoliceRequests),
+          detail: "pending_police_officers · status: pending",
+          trend: kpi.pendingPoliceRequests ? "needs action" : "clear",
+          tone: kpi.pendingPoliceRequests ? "warning" : "success",
+        },
         {
           label: "Rejected Requests",
-          value: String(rejectedRequests),
+          value: String(kpi.rejectedRequests),
           detail: "Editable by hospital admins",
-          trend: resubmissionRequests ? `${resubmissionRequests} resubmissions` : "reviewed",
-          tone: rejectedRequests ? "danger" : "success",
+          trend: kpi.resubmissionRequests ? `${kpi.resubmissionRequests} resubmissions` : "reviewed",
+          tone: kpi.rejectedRequests ? "danger" : "success",
         },
       ],
       operationalStats: [
         {
           label: "Active Ambulances",
-          value: String(ambulances.length),
+          value: String(kpi.activeAmbulancesCount),
           detail: "Verified fleet available",
           trend: "dispatch ready",
           tone: "success",
         },
         {
           label: "Active Hospitals",
-          value: String(hospitals.filter((hospital) => hospital.isActive).length),
+          value: String(kpi.activeHospitalsCount),
           detail: `${hospitals.length} hospitals connected`,
           trend: "network online",
           tone: "success",
         },
         {
           label: "Active Emergencies",
-          value: String(activeEmergencies.length),
+          value: String(kpi.activeEmergenciesCount),
           detail: "Currently tracked incidents",
           trend: "live monitoring",
-          tone: activeEmergencies.length ? "warning" : "success",
+          tone: kpi.activeEmergenciesCount ? "warning" : "success",
         },
       ],
-      approvalBreakdown: [
-        { name: "Approved", value: drivers.length + ambulances.length },
-        { name: "Rejected", value: rejectedRequests },
-        {
-          name: "Pending",
-          value:
-            pendingDriverRequests +
-            pendingAmbulanceRequests +
-            pendingPoliceRequests,
-        },
-        { name: "Resubmission", value: resubmissionRequests },
-      ],
-      verificationTrend: (() => {
-        const trendList = [
-          { day: "Mon", approvals: 0, rejections: 0 },
-          { day: "Tue", approvals: 0, rejections: 0 },
-          { day: "Wed", approvals: 0, rejections: 0 },
-          { day: "Thu", approvals: 0, rejections: 0 },
-          { day: "Fri", approvals: 0, rejections: 0 },
-          { day: "Sat", approvals: 0, rejections: 0 },
-          { day: "Sun", approvals: 0, rejections: 0 },
-        ];
-        const days = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
-        const allItems = [
-          ...(rejectedRequestsCollection || []),
-          ...(pendingDrivers || []),
-          ...(pendingAmbulances || []),
-          ...(pendingPoliceOfficers || []),
-        ];
-        allItems.forEach((req) => {
-          const ts = req.approvedAt || req.rejectedAt || req.updatedAt || req.submittedAt || req.createdAt || req.requestedAt;
-          if (!ts) return;
-          const dt = typeof ts?.toDate === "function" ? ts.toDate() : ts instanceof Date ? ts : new Date(ts);
-          if (isNaN(dt.getTime())) return;
-          const dayName = days[dt.getDay()];
-          const item = trendList.find((t) => t.day === dayName);
-          if (item) {
-            if (req.status === VERIFICATION_STATUS.approved) item.approvals += 1;
-            else if (req.status === VERIFICATION_STATUS.rejected) item.rejections += 1;
-          }
-        });
-        return trendList;
-      })(),
+      approvalBreakdown: breakdown,
+      verificationTrend: trend,
       systemPanels: [
         {
           label: "Firestore Database",
@@ -370,7 +462,7 @@ export function OpsProvider({ children }) {
       rejectedRequests: rejectedRequestsCollection,
       drivers,
       pendingAmbulances,
-      ambulances: ambulances,
+      ambulances,
       emergencies,
       activeEmergencies,
       liveLocations,
@@ -379,7 +471,16 @@ export function OpsProvider({ children }) {
       analytics,
       pendingPoliceOfficers,
       settings,
-      setSettings: (patch) => setSettings((current) => ({ ...current, ...patch })),
+      setSettings: (patch) =>
+        setSettingsState((current) => {
+          const updated = typeof patch === "function" ? patch(current) : { ...current, ...patch };
+          try {
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
+          } catch (e) {
+            console.error("Failed to write settings to localStorage:", e);
+          }
+          return updated;
+        }),
       hospitalsActions,
       driversActions,
       pendingDriversActions,
@@ -389,8 +490,21 @@ export function OpsProvider({ children }) {
       pendingPoliceOfficersActions,
       analyticsActions,
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [hospitals, pendingDrivers, rejectedRequestsCollection, drivers, pendingAmbulances, ambulances, emergencies, liveLocations, activityLogs, notifications, analytics, pendingPoliceOfficers, settings]);
+  }, [
+    hospitals,
+    pendingDrivers,
+    rejectedRequestsCollection,
+    drivers,
+    pendingAmbulances,
+    ambulances,
+    emergencies,
+    liveLocations,
+    activityLogs,
+    notifications,
+    analytics,
+    pendingPoliceOfficers,
+    settings,
+  ]);
 
   return <OpsContext.Provider value={value}>{children}</OpsContext.Provider>;
 }

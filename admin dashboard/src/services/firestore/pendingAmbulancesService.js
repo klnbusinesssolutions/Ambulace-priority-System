@@ -2,7 +2,7 @@ import { arrayUnion, doc, getFirestore, updateDoc, writeBatch } from "firebase/f
 import { COLLECTIONS, VERIFICATION_STATUS } from "../../firebase/collections.js";
 import { createCollectionService, orderBy, serverTimestamp, where } from "./firestoreCollection.js";
 import { createActivityLog } from "./activityLogService.js";
-import { createNotification } from "./notificationsService.js";
+import { createNotification, resolveNotificationByTargetId } from "./notificationsService.js";
 import { getCurrentAdmin } from "../auth/adminAuthService.js";
 import { getFirebaseApp, hasFirebaseConfig } from "../../firebase/client.js";
 import { createAmbulance as createApprovedAmbulance } from "./ambulancesService.js";
@@ -76,14 +76,15 @@ export async function approvePendingAmbulance(ambulance) {
     await batch.commit();
 
     try {
-      await createNotification({
-        hospitalId: ambulance.hospitalId,
+      await transitionNotificationTask(ambulance.id, {
+        status: "resolved",
+        actionState: "approved",
         type: "ambulance_approved",
-        title: "Ambulance Approved",
+        title: "✓ Ambulance Approved",
         message: `Ambulance ${ambulance.numberPlate || ambulance.registrationNumber} has been approved`,
       });
     } catch (err) {
-      console.error("Failed to create notification on ambulance approval:", err);
+      console.error("Failed to update notification on ambulance approval:", err);
     }
 
     try {
@@ -114,14 +115,13 @@ export async function rejectPendingAmbulance(ambulance, rejectionReason = "") {
     rejectedAt: serverTimestamp(),
   });
 
-  // Create notification
-  await createNotification({
-    hospitalId: ambulance.hospitalId,
+  // Transition task notification from Action Required -> Recently Resolved
+  await transitionNotificationTask(ambulance.id, {
+    status: "resolved",
+    actionState: "rejected",
     type: "ambulance_rejected",
-    title: "Ambulance Rejected",
-    message: `Ambulance ${
-      ambulance.numberPlate || ambulance.registrationNumber
-    } was rejected`,
+    title: "✕ Ambulance Rejected",
+    message: `Ambulance ${ambulance.numberPlate || ambulance.registrationNumber} was rejected`,
   });
 
   // Create activity log
@@ -165,14 +165,15 @@ export async function requestAmbulanceResubmission(ambulance, rejectionReason = 
     await batch.commit();
 
     try {
-      await createNotification({
-        hospitalId: ambulance.hospitalId,
+      await transitionNotificationTask(ambulance.id, {
+        status: "resolved",
+        actionState: "resubmission_required",
         type: "resubmission_required",
-        title: "Ambulance Resubmission Requested",
+        title: "↺ Ambulance Resubmission Requested",
         message: `Resubmission requested for ambulance ${ambulance.numberPlate || ambulance.registrationNumber}`,
       });
     } catch (err) {
-      console.error("Failed to create notification on resubmission request:", err);
+      console.error("Failed to update notification on resubmission request:", err);
     }
 
     try {

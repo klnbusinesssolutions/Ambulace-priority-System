@@ -2,14 +2,13 @@ import { doc, getFirestore, writeBatch } from "firebase/firestore";
 import { COLLECTIONS, VERIFICATION_STATUS } from "../../firebase/collections.js";
 import { createCollectionService, orderBy, serverTimestamp } from "./firestoreCollection.js";
 import { createActivityLog } from "./activityLogService.js";
-import { createRejectedRequest } from "./rejectedRequestsService.js";
+import { transitionNotificationTask } from "./notificationsService.js";
 import { getCurrentAdmin } from "../auth/adminAuthService.js";
 import { getFirebaseApp, hasFirebaseConfig } from "../../firebase/client.js";
+import { createRejectedRequest } from "./rejectedRequestsService.js";
 
 const pendingPoliceOfficers = createCollectionService(COLLECTIONS.pendingPoliceOfficers);
-
 const policeOfficers = createCollectionService(COLLECTIONS.policeOfficers);
-const policeTempCredentials = createCollectionService(COLLECTIONS.policeTempCredentials);
 
 export async function listenToPendingPoliceOfficers(callback, onError) {
   return pendingPoliceOfficers.listen(callback, { constraints: [orderBy("requestedAt", "desc")], onError });
@@ -20,55 +19,64 @@ export async function listenToPoliceOfficers(callback, onError) {
 }
 
 /**
- * Approving a request doesn't create the Firebase Auth account directly —
- * the client SDK can only manage the currently signed-in user, not create
- * accounts for other people. Instead this flips the pending doc's `status`
- * to "approved" (with any station/radius corrections the admin made), and
- * the `createPoliceOfficerCredentialsOnApproval` Cloud Function picks up
- * that change: it creates the Auth account, writes the `police_officers/{uid}`
- * profile, and drops a temp password into `police_temp_credentials/{requestId}`
- * for the admin to relay to the officer. Mirrors the driver approval flow.
+ * Approving a police officer request:
+ * - Preserves the officer's registration email and Firebase Auth UID.
+ * - Keyed explicitly by officer UID in `police_officers/{officerUid}`.
+ * - Sets status: "approved" and isActive: true so policeStore hydration succeeds.
+ * - Deletes the pending request from `pending_police_officers`.
+ * - Creates an activity log entry and triggers an approval notification.
  */
 export async function approvePendingPoliceOfficer(request, overrides = {}) {
   const admin = await getCurrentAdmin();
+  const officerUid = request.uid || request.id;
 
-  await pendingPoliceOfficers.update(request.id, {
-    status: VERIFICATION_STATUS.approved,
+  const approvedData = {
+    ...request,
+    uid: officerUid,
+    id: officerUid,
     station: overrides.station ?? request.station ?? null,
     serviceRadiusKm: overrides.serviceRadiusKm ?? request.serviceRadiusKm ?? 10,
-    approvedAt: serverTimestamp(),
-  });
-
-  const tempPassword = `PolicePass#${Math.floor(1000 + Math.random() * 9000)}`;
-  const credentialData = {
-    requestId: request.id,
-    badgeId: request.badgeId || "P-OFFICER",
-    email: request.email || `${request.badgeId}@police.gov.in`,
-    name: request.name || "Police Officer",
-    tempPassword,
-    createdAt: new Date().toISOString(),
+    status: VERIFICATION_STATUS.approved,
+    isActive: true,
+    approvedAt: hasFirebaseConfig() ? serverTimestamp() : new Date().toISOString(),
+    updatedAt: hasFirebaseConfig() ? serverTimestamp() : new Date().toISOString(),
   };
 
+  if (hasFirebaseConfig()) {
+    const app = await getFirebaseApp();
+    const db = getFirestore(app);
+    const batch = writeBatch(db);
+
+    const pendingRef = doc(db, COLLECTIONS.pendingPoliceOfficers, request.id);
+    const approvedRef = doc(db, COLLECTIONS.policeOfficers, officerUid);
+
+    batch.set(approvedRef, approvedData);
+    batch.delete(pendingRef);
+
+    await batch.commit();
+  }
+
   try {
-    await policeTempCredentials.setById(request.id, credentialData);
-  } catch (e) {
-    console.warn("Could not persist policeTempCredentials doc directly:", e);
+    await transitionNotificationTask(request.id, {
+      status: "resolved",
+      actionState: "approved",
+      type: "police_approved",
+      title: "✓ Police Officer Approved",
+      message: `Police Officer ${request.name || request.badgeId} has been approved`,
+    });
+  } catch (err) {
+    console.error("Failed to update notification on police officer approval:", err);
   }
 
   await createActivityLog({
     hospitalId: null,
     action: "police_officer_approved",
     performedBy: admin?.uid || "unknown",
-    targetId: request.id,
-    details: `Police officer ${request.name || request.badgeId} approved (badge ${request.badgeId}) - credentials created`,
+    targetId: officerUid,
+    details: `Police officer ${request.name || request.badgeId} approved (badge ${request.badgeId})`,
   });
 
-  return credentialData;
-}
-
-/** Watches `police_temp_credentials/{requestId}` for the Cloud Function's output. */
-export async function listenToPoliceTempCredential(requestId, callback, onError) {
-  return policeTempCredentials.listenById(requestId, callback, onError);
+  return approvedData;
 }
 
 export async function rejectPendingPoliceOfficer(request, rejectionReason = "") {
@@ -87,6 +95,18 @@ export async function rejectPendingPoliceOfficer(request, rejectionReason = "") 
     rejectionReason,
     rejectedAt: serverTimestamp(),
   });
+
+  try {
+    await transitionNotificationTask(request.id, {
+      status: "resolved",
+      actionState: "rejected",
+      type: "police_rejected",
+      title: "✕ Police Officer Rejected",
+      message: `Police Officer ${request.name || request.badgeId} was rejected`,
+    });
+  } catch (err) {
+    console.error("Failed to update notification on police officer rejection:", err);
+  }
 
   await createActivityLog({
     hospitalId: null,
@@ -142,7 +162,6 @@ export async function requestPoliceOfficerResubmission(request, reason = "") {
 
   return resubmitData;
 }
-
 
 export async function removePendingPoliceOfficer(id) {
   return pendingPoliceOfficers.remove(id);

@@ -2,7 +2,7 @@ import { doc, getFirestore, writeBatch } from "firebase/firestore";
 import { COLLECTIONS, VERIFICATION_STATUS } from "../../firebase/collections.js";
 import { createCollectionService, orderBy, serverTimestamp, where, hasFirebaseConfig } from "./firestoreCollection.js";
 import { getFirebaseApp } from "../../firebase/client.js";
-import { createNotification } from "./notificationsService.js";
+import { transitionNotificationTask } from "./notificationsService.js";
 import { getCurrentAdmin } from "../auth/adminAuthService.js";
 import { createActivityLog } from "./activityLogService.js";
 import { createDriver } from "./driversService.js";
@@ -43,11 +43,12 @@ export async function approvePendingDriver(pendingDriver) {
     emergencyContact: pendingDriver.emergencyContact,
   });
 
-  // Create notification
-  await createNotification({
-    hospitalId: pendingDriver.hospitalId,
+  // Transition task notification from Action Required -> Recently Resolved
+  await transitionNotificationTask(pendingDriver.id, {
+    status: "resolved",
+    actionState: "approved",
     type: "driver_approved",
-    title: "Driver Approved",
+    title: "✓ Driver Approved",
     message: `Driver ${pendingDriver.fullName || pendingDriver.driverName} has been approved`,
   });
 
@@ -88,19 +89,18 @@ export async function rejectPendingDriver(pendingDriver, rejectionReason = "") {
     batch.set(rejectedRef, rejectedData);
     batch.delete(pendingRef);
 
-    // Atomically write to rejected_requests and delete from pending_drivers.
-    // If set fails, delete is NOT performed.
     await batch.commit();
 
     try {
-      await createNotification({
-        hospitalId: pendingDriver.hospitalId,
+      await transitionNotificationTask(pendingDriver.id, {
+        status: "resolved",
+        actionState: "rejected",
         type: "driver_rejected",
-        title: "Driver Rejected",
+        title: "✕ Driver Rejected",
         message: `Driver ${pendingDriver.fullName || pendingDriver.driverName} was rejected`,
       });
     } catch (err) {
-      console.error("Failed to create notification on driver rejection:", err);
+      console.error("Failed to update notification on driver rejection:", err);
     }
 
     try {
@@ -147,14 +147,15 @@ export async function requestPendingDriverResubmission(pendingDriver, rejectionR
     await batch.commit();
 
     try {
-      await createNotification({
-        hospitalId: pendingDriver.hospitalId,
+      await transitionNotificationTask(pendingDriver.id, {
+        status: "resolved",
+        actionState: "resubmission_required",
         type: "resubmission_required",
-        title: "Driver Resubmission Requested",
+        title: "↺ Driver Resubmission Requested",
         message: `Resubmission requested for driver ${pendingDriver.fullName || pendingDriver.driverName}`,
       });
     } catch (err) {
-      console.error("Failed to create notification on resubmission request:", err);
+      console.error("Failed to update notification on resubmission request:", err);
     }
 
     try {
@@ -178,6 +179,3 @@ export async function requestPendingDriverResubmission(pendingDriver, rejectionR
 export async function removePendingDriver(id) {
   return pendingDrivers.remove(id);
 }
-
-
-

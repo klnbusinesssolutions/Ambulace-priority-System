@@ -9,6 +9,8 @@ import Emergencies from "../pages/Emergencies/Emergencies.jsx";
 import Hospitals from "../pages/Hospitals/Hospitals.jsx";
 import LiveTracking from "../pages/LiveTracking/LiveTracking.jsx";
 import Settings from "../pages/Settings/Settings.jsx";
+import Notifications from "../pages/Notifications/Notifications.jsx";
+import ExportCenter from "../pages/ExportCenter/ExportCenter.jsx";
 import PendingAmbulances from "../pages/Verification/PendingAmbulances.jsx";
 import PendingDrivers from "../pages/Verification/PendingDrivers.jsx";
 import PendingPoliceOfficers from "../pages/Verification/PendingPoliceOfficers.jsx";
@@ -46,6 +48,8 @@ export const router = createBrowserRouter([
           { path: "emergencies", element: <Emergencies /> },
           { path: "analytics", element: <Analytics /> },
           { path: "activity-logs", element: <ActivityLogs /> },
+          { path: "notifications", element: <Notifications /> },
+          { path: "export-center", element: <ExportCenter /> },
           { path: "settings", element: <Settings /> },
           { path: "*", element: <Navigate to="/admin/dashboard" replace /> },
         ],

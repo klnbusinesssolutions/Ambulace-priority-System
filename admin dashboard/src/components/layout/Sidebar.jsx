@@ -7,6 +7,7 @@ import {
   ChevronLeft,
   ChevronRight,
   ClipboardList,
+  Download,
   LayoutDashboard,
   Menu,
   Radar,
@@ -37,6 +38,7 @@ const navItems = [
   { label: "Active Emergencies", to: "/admin/emergencies", icon: Activity },
   { label: "Analytics", to: "/admin/analytics", icon: BarChart3 },
   { label: "Activity Logs", to: "/admin/activity-logs", icon: ClipboardList },
+  { label: "Export Center", to: "/admin/export-center", icon: Download },
   { label: "Settings", to: "/admin/settings", icon: Settings },
 ];
 
@@ -44,19 +46,19 @@ export default function Sidebar({ collapsed, mobileOpen, onCloseMobile, onToggle
   const body = (
     <aside
       className={cn(
-        "flex h-full flex-col border-r border-slate-200 bg-white transition-all",
+        "flex h-full flex-col border-r border-slate-200 bg-white dark:border-slate-800 dark:bg-[#111827] transition-all",
         collapsed ? "w-20" : "w-72",
       )}
     >
-      <div className="flex h-16 items-center justify-between border-b border-slate-100 px-4">
+      <div className="flex h-16 items-center justify-between border-b border-slate-100 dark:border-slate-800 px-4">
         <div className="flex min-w-0 items-center gap-3">
-          <div className="grid h-9 w-9 shrink-0 place-items-center rounded-md bg-slate-950 text-sm font-semibold text-white">
+          <div className="grid h-9 w-9 shrink-0 place-items-center rounded-md bg-slate-950 dark:bg-emerald-600 text-sm font-semibold text-white">
             AG
           </div>
           {!collapsed && (
             <div className="min-w-0">
-              <p className="truncate text-sm font-semibold text-slate-950">AmbuGrid</p>
-              <p className="truncate text-xs text-slate-500">Super Admin Panel</p>
+              <p className="truncate text-sm font-semibold text-slate-950 dark:text-slate-100">AmbuGrid</p>
+              <p className="truncate text-xs text-slate-500 dark:text-slate-400">Super Admin Panel</p>
             </div>
           )}
         </div>
@@ -65,13 +67,13 @@ export default function Sidebar({ collapsed, mobileOpen, onCloseMobile, onToggle
         </Button>
       </div>
 
-      <nav className="flex-1 space-y-1 px-3 py-4">
+      <nav className="flex-1 space-y-1 overflow-y-auto scrollbar-subtle px-3 py-4">
         {navItems.map((item) => (
           item.children ? (
             <div key={item.label} className="space-y-1">
               <div
                 className={cn(
-                  "flex h-10 items-center gap-3 rounded-md px-3 text-sm font-medium text-slate-600",
+                  "flex h-10 items-center gap-3 rounded-md px-3 text-sm font-medium text-slate-600 dark:text-slate-400",
                   collapsed && "justify-center px-0",
                 )}
                 title={collapsed ? item.label : undefined}
@@ -89,8 +91,8 @@ export default function Sidebar({ collapsed, mobileOpen, onCloseMobile, onToggle
                       cn(
                         "ml-7 flex h-8 items-center rounded-md px-3 text-sm font-medium transition",
                         isActive
-                          ? "bg-slate-950 text-white"
-                          : "text-slate-500 hover:bg-slate-100 hover:text-slate-950",
+                          ? "bg-slate-950 text-white dark:bg-slate-100 dark:text-slate-950"
+                          : "text-slate-500 hover:bg-slate-100 hover:text-slate-950 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-100",
                       )
                     }
                   >
@@ -107,8 +109,8 @@ export default function Sidebar({ collapsed, mobileOpen, onCloseMobile, onToggle
                 cn(
                   "flex h-10 items-center gap-3 rounded-md px-3 text-sm font-medium transition",
                   isActive
-                    ? "bg-slate-950 text-white"
-                    : "text-slate-600 hover:bg-slate-100 hover:text-slate-950",
+                    ? "bg-slate-950 text-white dark:bg-slate-100 dark:text-slate-950"
+                    : "text-slate-600 hover:bg-slate-100 hover:text-slate-950 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-100",
                   collapsed && "justify-center px-0",
                 )
               }
@@ -121,14 +123,19 @@ export default function Sidebar({ collapsed, mobileOpen, onCloseMobile, onToggle
         ))}
       </nav>
 
-      <div className="hidden border-t border-slate-100 p-3 lg:block">
+      <div className="mt-auto shrink-0 border-t border-slate-200 dark:border-slate-800 p-3 hidden lg:block">
         <Button
           variant="ghost"
-          className={cn("w-full", collapsed ? "px-0" : "justify-start")}
+          className={cn(
+            "w-full text-slate-600 dark:text-slate-400 hover:text-slate-950 dark:hover:text-slate-100",
+            collapsed ? "justify-center px-0" : "justify-start gap-3",
+          )}
           onClick={onToggleCollapse}
+          aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+          title={collapsed ? "Expand sidebar" : undefined}
         >
-          {collapsed ? <ChevronRight className="h-4 w-4" /> : <ChevronLeft className="h-4 w-4" />}
-          {!collapsed && "Collapse sidebar"}
+          {collapsed ? <ChevronRight className="h-4 w-4 shrink-0" /> : <ChevronLeft className="h-4 w-4 shrink-0" />}
+          {!collapsed && <span className="truncate">Collapse sidebar</span>}
         </Button>
       </div>
     </aside>

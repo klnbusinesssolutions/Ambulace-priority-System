@@ -1,18 +1,20 @@
 import { cn } from "../../utils/cn.js";
 
 export default function Select({ className, label, error, options = [], ...props }) {
+  const validOptions = (options || []).filter((option) => option !== null && option !== undefined);
+
   const control = (
     <select
       className={cn(
-        "focus-ring h-9 w-full rounded-md border border-slate-200 bg-white px-3 text-sm text-slate-900",
+        "focus-ring h-9 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-900 dark:border-slate-700/80 dark:bg-[#0F172A] dark:text-slate-100 transition-colors shadow-xs",
         error && "border-red-500 focus:border-red-500 focus:ring-red-500",
         className,
       )}
       {...props}
     >
-      {options.map((option) => (
-        <option key={typeof option === "string" ? option : option.value} value={typeof option === "string" ? option : option.value}>
-          {typeof option === "string" ? option : option.label}
+      {validOptions.map((option) => (
+        <option key={typeof option === "string" ? option : option?.value ?? option?.label ?? ""} value={typeof option === "string" ? option : option?.value ?? ""}>
+          {typeof option === "string" ? option : option?.label ?? option?.value ?? ""}
         </option>
       ))}
     </select>
@@ -22,10 +24,9 @@ export default function Select({ className, label, error, options = [], ...props
 
   return (
     <div className="grid gap-1.5">
-      {label && <label className="text-sm font-medium text-slate-700">{label}</label>}
+      {label && <label className="text-xs font-bold uppercase tracking-wider text-slate-600 dark:text-slate-400">{label}</label>}
       {control}
-      {error && <p className="text-xs font-medium text-red-600">{error}</p>}
+      {error && <p className="text-xs font-medium text-red-600 dark:text-red-400">{error}</p>}
     </div>
   );
 }
-

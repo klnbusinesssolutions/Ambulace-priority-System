@@ -15,6 +15,7 @@ export default function AmbulancesTable({
   onEdit,
   showVerificationActions = true,
   actionId = null,
+  ...props
 }) {
   const columns = [
     {
@@ -43,17 +44,42 @@ export default function AmbulancesTable({
     key: "actions",
     header: "",
     render: (row) => (
-      <div className="flex justify-end gap-1">
+      <div className="flex justify-end gap-1" onClick={(e) => e.stopPropagation()}>
         {onEdit && (
-          <Button variant="ghost" size="icon" onClick={() => onEdit(row)} aria-label={`Edit ${row.numberPlate}`} disabled={actionId === row.id}>
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={(e) => {
+              e.stopPropagation();
+              onEdit(row);
+            }}
+            aria-label={`Edit ${row.numberPlate}`}
+            disabled={actionId === row.id}
+          >
             <Pencil className="h-4 w-4 text-slate-600" />
           </Button>
         )}
-        <Button variant="ghost" size="icon" onClick={() => onViewDetails(row)} aria-label={`View ${row.numberPlate}`}>
+        <Button
+          variant="ghost"
+          size="icon"
+          onClick={(e) => {
+            e.stopPropagation();
+            onViewDetails(row);
+          }}
+          aria-label={`View ${row.numberPlate}`}
+        >
           <Eye className="h-4 w-4" />
         </Button>
         {onViewDocuments && (
-          <Button variant="ghost" size="icon" onClick={() => onViewDocuments(row)} aria-label={`View documents for ${row.numberPlate}`}>
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={(e) => {
+              e.stopPropagation();
+              onViewDocuments(row);
+            }}
+            aria-label={`View documents for ${row.numberPlate}`}
+          >
             <FileSearch className="h-4 w-4" />
           </Button>
         )}
@@ -62,7 +88,10 @@ export default function AmbulancesTable({
             <Button
               variant="ghost"
               size="icon"
-              onClick={() => onApprove(row)}
+              onClick={(e) => {
+                e.stopPropagation();
+                onApprove(row);
+              }}
               aria-label={`Approve ${row.numberPlate}`}
               disabled={row.status === "approved" || actionId === row.id}
             >
@@ -75,7 +104,10 @@ export default function AmbulancesTable({
             <Button
               variant="ghost"
               size="icon"
-              onClick={() => onReject(row)}
+              onClick={(e) => {
+                e.stopPropagation();
+                onReject(row);
+              }}
               aria-label={`Reject ${row.numberPlate}`}
               disabled={row.status === "rejected" || actionId === row.id}
             >
@@ -84,7 +116,10 @@ export default function AmbulancesTable({
             <Button
               variant="ghost"
               size="icon"
-              onClick={() => onRequestResubmission(row)}
+              onClick={(e) => {
+                e.stopPropagation();
+                onRequestResubmission(row);
+              }}
               aria-label={`Request resubmission for ${row.numberPlate}`}
               disabled={row.status === "resubmission_required" || actionId === row.id}
             >
@@ -97,5 +132,5 @@ export default function AmbulancesTable({
   });
 
 
-  return <DataTable rows={rows} emptyTitle="No ambulances match this view" columns={columns} />;
+  return <DataTable rows={rows} emptyTitle="No ambulances match this view" columns={columns} {...props} />;
 }

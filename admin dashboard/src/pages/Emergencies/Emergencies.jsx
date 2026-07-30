@@ -1,16 +1,23 @@
 import { useMemo, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import EmergencyCards from "../../components/emergencies/EmergencyCards.jsx";
 import Input from "../../components/ui/Input.jsx";
 import PageHeader from "../../components/ui/PageHeader.jsx";
 import Select from "../../components/ui/Select.jsx";
 import { useOps } from "../../context/OpsContext.jsx";
+import { useOverlay } from "../../context/OverlayContext.jsx";
 import { matchesSearch } from "../../utils/formatters.js";
 
 export default function Emergencies() {
+  const [searchParams] = useSearchParams();
+  const initialStatus = searchParams.get("status") || "All statuses";
+  const initialPriority = searchParams.get("priority") || "All priority";
+
   const { emergencies, emergenciesActions } = useOps();
+  const { openDrawer } = useOverlay();
   const [query, setQuery] = useState("");
-  const [priority, setPriority] = useState("All priority");
-  const [status, setStatus] = useState("All statuses");
+  const [priority, setPriority] = useState(initialPriority);
+  const [status, setStatus] = useState(initialStatus);
 
   const rows = useMemo(
     () =>
@@ -31,7 +38,11 @@ export default function Emergencies() {
         <Select className="sm:w-44" value={priority} onChange={(event) => setPriority(event.target.value)} options={["All priority", "critical", "high", "medium", "low"]} />
         <Select className="sm:w-48" value={status} onChange={(event) => setStatus(event.target.value)} options={["All statuses", "active", "dispatched", "arrived", "completed", "resolved"]} />
       </div>
-      <EmergencyCards rows={rows} onStatusChange={(id, next) => emergenciesActions.updateStatus(id, next)} />
+      <EmergencyCards
+        rows={rows}
+        onStatusChange={(id, next) => emergenciesActions.updateStatus(id, next)}
+        onCardClick={(emergency) => openDrawer({ type: "emergency", item: emergency })}
+      />
     </div>
   );
 }

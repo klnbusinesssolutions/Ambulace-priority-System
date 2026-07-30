@@ -28,6 +28,7 @@ export const COLLECTIONS = {
   // *request* id (not uid, which doesn't exist yet when the admin clicks
   // Approve) so the dashboard can watch for it immediately.
   policeTempCredentials: "police_temp_credentials",
+  loginHistory: "login_history",
 };
 
 export const ADMIN_ROLES = {
@@ -89,6 +90,10 @@ export const NOTIFICATION_TYPES = {
   ambulanceApproved: "ambulance_approved",
   ambulanceRejected: "ambulance_rejected",
   resubmissionRequired: "resubmission_required",
+  newDriverRequest: "new_driver_request",
+  newAmbulanceRequest: "new_ambulance_request",
+  newHospitalRequest: "new_hospital_request",
+  newPoliceRequest: "new_police_request",
 };
 
 export const NOTIFICATION_LABELS = {
@@ -97,4 +102,8 @@ export const NOTIFICATION_LABELS = {
   [NOTIFICATION_TYPES.ambulanceApproved]: "Ambulance Approved",
   [NOTIFICATION_TYPES.ambulanceRejected]: "Ambulance Rejected",
   [NOTIFICATION_TYPES.resubmissionRequired]: "Resubmission Required",
+  [NOTIFICATION_TYPES.newDriverRequest]: "New Driver Request",
+  [NOTIFICATION_TYPES.newAmbulanceRequest]: "New Ambulance Request",
+  [NOTIFICATION_TYPES.newHospitalRequest]: "New Hospital Request",
+  [NOTIFICATION_TYPES.newPoliceRequest]: "New Police Request",
 };

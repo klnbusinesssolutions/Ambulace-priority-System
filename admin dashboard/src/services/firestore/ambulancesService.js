@@ -25,7 +25,7 @@ export async function createAmbulance(ambulance) {
   }
 
   return ambulances.setById(ambulance.id, {
-    hospitalId: payload.hospitalId,
+    hospitalId: payload.hospitalId || "",
     hospitalName: payload.hospitalName || "",
 
     registrationNumber: payload.registrationNumber,

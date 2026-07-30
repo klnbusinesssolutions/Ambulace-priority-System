@@ -8,6 +8,7 @@ import StatusBadge from "../../components/ui/StatusBadge.jsx";
 import Button from "../../components/ui/Button.jsx";
 import Modal from "../../components/ui/Modal.jsx";
 import { useOps } from "../../context/OpsContext.jsx";
+import { useOverlay } from "../../context/OverlayContext.jsx";
 import { formatDateTime, matchesSearch } from "../../utils/formatters.js";
 
 const availabilityStatus = {
@@ -17,7 +18,8 @@ const availabilityStatus = {
 };
 
 export default function Drivers() {
-  const { drivers, driversActions } = useOps();
+  const { drivers = [], driversActions } = useOps();
+  const { openDrawer } = useOverlay();
   const [query, setQuery] = useState("");
   const [hospital, setHospital] = useState("All hospitals");
   const [confirmRemove, setConfirmRemove] = useState(null);
@@ -46,6 +48,7 @@ export default function Drivers() {
       <DataTable
         rows={rows}
         emptyTitle="No drivers found"
+        onRowClick={(row) => openDrawer({ type: "driver", item: row })}
         columns={[
           { key: "name", header: "Driver", render: (row) => <div><p className="font-medium text-slate-950">{row.name}</p><p className="text-xs text-slate-500">{row.id}</p></div> },
           { key: "hospitalName", header: "Hospital" },
@@ -71,7 +74,15 @@ export default function Drivers() {
             key: "actions",
             header: "",
             render: (row) => (
-              <Button variant="ghost" size="icon" onClick={() => setConfirmRemove(row)} aria-label={`Remove ${row.name}`}>
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setConfirmRemove(row);
+                }}
+                aria-label={`Remove ${row.name}`}
+              >
                 <Ban className="h-4 w-4 text-red-600" />
               </Button>
             ),

@@ -2,7 +2,6 @@ import { useMemo, useState } from "react";
 import {
   Activity,
   AlertTriangle,
-  BarChart2,
   CheckCircle2,
   Clock,
   Filter,
@@ -25,12 +24,14 @@ import {
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../../components/ui/Card.jsx";
 import DataTable from "../../components/ui/DataTable.jsx";
+import EmptyState from "../../components/ui/EmptyState.jsx";
 import Input from "../../components/ui/Input.jsx";
 import PageHeader from "../../components/ui/PageHeader.jsx";
 import Select from "../../components/ui/Select.jsx";
 import StatusBadge from "../../components/ui/StatusBadge.jsx";
 import { useOps } from "../../context/OpsContext.jsx";
 import { formatDateTime } from "../../utils/formatters.js";
+import { calculateEmergencyAnalyticsData, safeParseDate } from "../../utils/analyticsAggregator.js";
 
 const PRIORITY_COLORS = {
   critical: "#dc2626",
@@ -40,47 +41,20 @@ const PRIORITY_COLORS = {
 };
 
 export default function Analytics() {
-  const { analytics, hospitals, emergencies } = useOps();
+  const { analytics = [], hospitals = [], emergencies = [] } = useOps();
   const [searchTerm, setSearchTerm] = useState("");
   const [hospitalFilter, setHospitalFilter] = useState("all");
   const [priorityFilter, setPriorityFilter] = useState("all");
+  const [timeRangeFilter, setTimeRangeFilter] = useState("all");
 
-  // Merge analytics records with hospital names and fallback data if needed
+  // Merge analytics and emergencies strictly driven by Firestore data (NO FAKE RANDOM NUMBERS)
   const combinedAnalytics = useMemo(() => {
-    const rawList = analytics && analytics.length > 0 ? analytics : [];
-    
-    // If no analytics records, map completed emergencies as fallback analytics
-    if (rawList.length === 0 && emergencies && emergencies.length > 0) {
-      return emergencies.map((e, idx) => ({
-        id: `AN-EMG-${idx + 1}`,
-        emergencyId: e.id,
-        hospitalId: e.hospitalId,
-        hospitalName: hospitals.find((h) => h.hospitalId === e.hospitalId || h.id === e.hospitalId)?.name || e.hospitalId || "N/A",
-        driverId: e.driverId || "N/A",
-        driverName: e.driverName || "Assigned Driver",
-        ambulanceId: e.ambulanceId || "N/A",
-        responseTime: e.responseTime || Math.floor(Math.random() * 8) + 5,
-        totalDuration: e.totalDuration || Math.floor(Math.random() * 20) + 25,
-        priority: e.priority || "medium",
-        incidentType: e.incidentType || "Emergency Response",
-        createdAt: e.startTime || new Date().toISOString(),
-      }));
-    }
-
-    return rawList.map((item) => {
-      const hospitalObj = hospitals.find(
-        (h) => h.hospitalId === item.hospitalId || h.id === item.hospitalId,
-      );
-      return {
-        ...item,
-        hospitalName: item.hospitalName || hospitalObj?.name || item.hospitalId || "N/A",
-        priority: (item.priority || "medium").toLowerCase(),
-      };
-    });
+    return calculateEmergencyAnalyticsData(analytics, emergencies, hospitals);
   }, [analytics, emergencies, hospitals]);
 
-  // Filtering
+  // Filtering by search term, hospital, priority, and date range
   const filteredData = useMemo(() => {
+    const now = new Date();
     return combinedAnalytics.filter((record) => {
       const matchesSearch =
         !searchTerm ||
@@ -92,17 +66,28 @@ export default function Analytics() {
       const matchesHospital = hospitalFilter === "all" || record.hospitalId === hospitalFilter;
       const matchesPriority = priorityFilter === "all" || record.priority === priorityFilter;
 
-      return matchesSearch && matchesHospital && matchesPriority;
+      let matchesTime = true;
+      if (timeRangeFilter !== "all") {
+        const recordDate = safeParseDate(record.createdAt);
+        if (recordDate) {
+          const diffDays = (now - recordDate) / (1000 * 60 * 60 * 24);
+          if (timeRangeFilter === "today") matchesTime = diffDays <= 1;
+          else if (timeRangeFilter === "7days") matchesTime = diffDays <= 7;
+          else if (timeRangeFilter === "30days") matchesTime = diffDays <= 30;
+        }
+      }
+
+      return matchesSearch && matchesHospital && matchesPriority && matchesTime;
     });
-  }, [combinedAnalytics, searchTerm, hospitalFilter, priorityFilter]);
+  }, [combinedAnalytics, searchTerm, hospitalFilter, priorityFilter, timeRangeFilter]);
 
   // Aggregate KPI Statistics
   const stats = useMemo(() => {
     const total = filteredData.length;
     if (total === 0) {
       return {
-        avgResponseTime: 0,
-        avgDuration: 0,
+        avgResponseTime: "0.0",
+        avgDuration: "0.0",
         totalIncidents: 0,
         efficiencyRate: 100,
         criticalCount: 0,
@@ -126,7 +111,7 @@ export default function Analytics() {
     };
   }, [filteredData]);
 
-  // Chart Data Preparation: Priority Breakdown
+  // Priority Breakdown Donut Data
   const priorityChartData = useMemo(() => {
     const counts = { critical: 0, high: 0, medium: 0, low: 0 };
     filteredData.forEach((item) => {
@@ -134,15 +119,17 @@ export default function Analytics() {
       counts[p] = (counts[p] || 0) + 1;
     });
 
+    const total = filteredData.length;
+
     return [
-      { name: "Critical", value: counts.critical, color: PRIORITY_COLORS.critical },
-      { name: "High", value: counts.high, color: PRIORITY_COLORS.high },
-      { name: "Medium", value: counts.medium, color: PRIORITY_COLORS.medium },
-      { name: "Low", value: counts.low, color: PRIORITY_COLORS.low },
+      { name: "Critical", value: counts.critical, color: PRIORITY_COLORS.critical, percentage: total ? Math.round((counts.critical / total) * 100) : 0 },
+      { name: "High", value: counts.high, color: PRIORITY_COLORS.high, percentage: total ? Math.round((counts.high / total) * 100) : 0 },
+      { name: "Medium", value: counts.medium, color: PRIORITY_COLORS.medium, percentage: total ? Math.round((counts.medium / total) * 100) : 0 },
+      { name: "Low", value: counts.low, color: PRIORITY_COLORS.low, percentage: total ? Math.round((counts.low / total) * 100) : 0 },
     ].filter((item) => item.value > 0);
   }, [filteredData]);
 
-  // Chart Data Preparation: Hospital Comparison
+  // Hospital Comparison Bar Chart Data
   const hospitalChartData = useMemo(() => {
     const hospitalGroup = {};
     filteredData.forEach((item) => {
@@ -167,7 +154,7 @@ export default function Analytics() {
       key: "emergencyId",
       header: "Incident ID",
       render: (row) => (
-        <span className="font-semibold text-slate-900">{row.emergencyId || row.id}</span>
+        <span className="font-semibold text-slate-900 dark:text-slate-100">{row.emergencyId || row.id}</span>
       ),
     },
     {
@@ -175,7 +162,7 @@ export default function Analytics() {
       header: "Hospital",
       render: (row) => (
         <div>
-          <p className="font-medium text-slate-900">{row.hospitalName}</p>
+          <p className="font-medium text-slate-900 dark:text-slate-100">{row.hospitalName}</p>
           <p className="text-xs text-slate-500">{row.hospitalId}</p>
         </div>
       ),
@@ -201,10 +188,10 @@ export default function Analytics() {
         <span
           className={`font-semibold ${
             (row.responseTime || 0) <= 8
-              ? "text-emerald-600"
+              ? "text-emerald-600 dark:text-emerald-400"
               : (row.responseTime || 0) <= 12
-                ? "text-amber-600"
-                : "text-red-600"
+                ? "text-amber-600 dark:text-amber-400"
+                : "text-red-600 dark:text-red-400"
           }`}
         >
           {row.responseTime ? `${row.responseTime} mins` : "N/A"}
@@ -237,9 +224,9 @@ export default function Analytics() {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm font-medium text-slate-500">Avg Response Time</p>
-                <p className="mt-2 text-2xl font-bold text-slate-950">{stats.avgResponseTime}m</p>
+                <p className="mt-2 text-2xl font-bold text-slate-950 dark:text-white">{stats.avgResponseTime}m</p>
               </div>
-              <div className="grid h-10 w-10 place-items-center rounded-lg bg-amber-50 text-amber-600">
+              <div className="grid h-10 w-10 place-items-center rounded-lg bg-amber-50 dark:bg-amber-950/40 text-amber-600 dark:text-amber-400">
                 <Clock className="h-5 w-5" />
               </div>
             </div>
@@ -252,9 +239,9 @@ export default function Analytics() {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm font-medium text-slate-500">Avg Total Duration</p>
-                <p className="mt-2 text-2xl font-bold text-slate-950">{stats.avgDuration}m</p>
+                <p className="mt-2 text-2xl font-bold text-slate-950 dark:text-white">{stats.avgDuration}m</p>
               </div>
-              <div className="grid h-10 w-10 place-items-center rounded-lg bg-emerald-50 text-emerald-600">
+              <div className="grid h-10 w-10 place-items-center rounded-lg bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400">
                 <Truck className="h-5 w-5" />
               </div>
             </div>
@@ -267,9 +254,9 @@ export default function Analytics() {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm font-medium text-slate-500">Total Incidents</p>
-                <p className="mt-2 text-2xl font-bold text-slate-950">{stats.totalIncidents}</p>
+                <p className="mt-2 text-2xl font-bold text-slate-950 dark:text-white">{stats.totalIncidents}</p>
               </div>
-              <div className="grid h-10 w-10 place-items-center rounded-lg bg-blue-50 text-blue-600">
+              <div className="grid h-10 w-10 place-items-center rounded-lg bg-blue-50 dark:bg-blue-950/40 text-blue-600 dark:text-blue-400">
                 <Activity className="h-5 w-5" />
               </div>
             </div>
@@ -282,9 +269,9 @@ export default function Analytics() {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm font-medium text-slate-500">Target Response Rate</p>
-                <p className="mt-2 text-2xl font-bold text-slate-950">{stats.efficiencyRate}%</p>
+                <p className="mt-2 text-2xl font-bold text-slate-950 dark:text-white">{stats.efficiencyRate}%</p>
               </div>
-              <div className="grid h-10 w-10 place-items-center rounded-lg bg-teal-50 text-teal-600">
+              <div className="grid h-10 w-10 place-items-center rounded-lg bg-teal-50 dark:bg-teal-950/40 text-teal-600 dark:text-teal-400">
                 <CheckCircle2 className="h-5 w-5" />
               </div>
             </div>
@@ -297,9 +284,9 @@ export default function Analytics() {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm font-medium text-slate-500">Critical Cases</p>
-                <p className="mt-2 text-2xl font-bold text-slate-950">{stats.criticalCount}</p>
+                <p className="mt-2 text-2xl font-bold text-slate-950 dark:text-white">{stats.criticalCount}</p>
               </div>
-              <div className="grid h-10 w-10 place-items-center rounded-lg bg-red-50 text-red-600">
+              <div className="grid h-10 w-10 place-items-center rounded-lg bg-red-50 dark:bg-red-950/40 text-red-600 dark:text-red-400">
                 <AlertTriangle className="h-5 w-5" />
               </div>
             </div>
@@ -316,17 +303,23 @@ export default function Analytics() {
             <CardDescription>Average emergency response time (minutes) per hospital facility</CardDescription>
           </CardHeader>
           <CardContent className="h-72">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={hospitalChartData}>
-                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
-                <XAxis dataKey="hospital" tickLine={false} axisLine={false} fontSize={12} />
-                <YAxis tickLine={false} axisLine={false} fontSize={12} unit="m" />
-                <Tooltip cursor={{ fill: "#f8fafc" }} />
-                <Legend />
-                <Bar dataKey="avgResponse" name="Avg Response (m)" fill="#2563eb" radius={[4, 4, 0, 0]} />
-                <Bar dataKey="incidents" name="Total Incidents" fill="#64748b" radius={[4, 4, 0, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
+            {hospitalChartData.length === 0 ? (
+              <div className="flex h-full items-center justify-center">
+                <EmptyState title="No hospital metrics available" description="Response times per hospital will display as emergencies complete." />
+              </div>
+            ) : (
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={hospitalChartData}>
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
+                  <XAxis dataKey="hospital" tickLine={false} axisLine={false} fontSize={12} />
+                  <YAxis tickLine={false} axisLine={false} fontSize={12} unit="m" allowDecimals={false} />
+                  <Tooltip cursor={{ fill: "#f8fafc" }} />
+                  <Legend />
+                  <Bar dataKey="avgResponse" name="Avg Response (m)" fill="#2563eb" radius={[4, 4, 0, 0]} />
+                  <Bar dataKey="incidents" name="Total Incidents" fill="#64748b" radius={[4, 4, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            )}
           </CardContent>
         </Card>
 
@@ -336,24 +329,30 @@ export default function Analytics() {
             <CardDescription>Proportion of emergency incidents categorized by priority level</CardDescription>
           </CardHeader>
           <CardContent className="h-72">
-            <ResponsiveContainer width="100%" height="100%">
-              <PieChart>
-                <Pie
-                  data={priorityChartData}
-                  dataKey="value"
-                  nameKey="name"
-                  innerRadius={60}
-                  outerRadius={95}
-                  paddingAngle={4}
-                >
-                  {priorityChartData.map((entry) => (
-                    <Cell key={entry.name} fill={entry.color} />
-                  ))}
-                </Pie>
-                <Tooltip />
-                <Legend />
-              </PieChart>
-            </ResponsiveContainer>
+            {priorityChartData.length === 0 ? (
+              <div className="flex h-full items-center justify-center">
+                <EmptyState title="No priority metrics available" description="Priority distribution will display as emergencies are logged." />
+              </div>
+            ) : (
+              <ResponsiveContainer width="100%" height="100%">
+                <PieChart>
+                  <Pie
+                    data={priorityChartData}
+                    dataKey="value"
+                    nameKey="name"
+                    innerRadius={60}
+                    outerRadius={95}
+                    paddingAngle={4}
+                  >
+                    {priorityChartData.map((entry) => (
+                      <Cell key={entry.name} fill={entry.color} />
+                    ))}
+                  </Pie>
+                  <Tooltip formatter={(val, name, entry) => [`${val} (${entry.payload.percentage}%)`, name]} />
+                  <Legend />
+                </PieChart>
+              </ResponsiveContainer>
+            )}
           </CardContent>
         </Card>
       </div>
@@ -375,8 +374,18 @@ export default function Analytics() {
                 className="pl-9"
               />
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               <Filter className="h-4 w-4 text-slate-400" />
+              <Select
+                value={timeRangeFilter}
+                onChange={(e) => setTimeRangeFilter(e.target.value)}
+                options={[
+                  { value: "all", label: "All Time" },
+                  { value: "today", label: "Today" },
+                  { value: "7days", label: "Last 7 Days" },
+                  { value: "30days", label: "Last 30 Days" },
+                ]}
+              />
               <Select
                 value={hospitalFilter}
                 onChange={(e) => setHospitalFilter(e.target.value)}

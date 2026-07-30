@@ -92,11 +92,20 @@ export async function createHospital(hospitalId, data) {
   cleanData.email = normalizedEmail;
 
   const isActive = cleanData.isActive ?? true;
+  const hospitalLocation = cleanData.location || cleanData.address || "";
+  const hospitalName = cleanData.hospitalName || cleanData.name || "";
 
   const hospitalPayload = {
     hospitalId,
     authUid,
     role: "hospital_admin",
+    hospitalName,
+    name: cleanData.name || hospitalName,
+    email: normalizedEmail,
+    location: hospitalLocation,
+    address: hospitalLocation,
+    latitude: typeof cleanData.latitude === "number" ? cleanData.latitude : null,
+    longitude: typeof cleanData.longitude === "number" ? cleanData.longitude : null,
     isActive,
     status: isActive ? "approved" : "inactive",
     createdAt: serverTimestamp(),
@@ -108,7 +117,7 @@ export async function createHospital(hospitalId, data) {
     email: normalizedEmail,
     role: "hospital_admin",
     hospitalId,
-    hospitalName: cleanData.name || "",
+    hospitalName: cleanData.name || hospitalName,
     isActive,
     status: isActive ? "approved" : "inactive",
     createdAt: serverTimestamp(),
@@ -149,10 +158,20 @@ export async function updateHospital(hospitalId, patch) {
   }
 
   const { password, ...cleanPatch } = patch;
+  if (cleanPatch.location || cleanPatch.address) {
+    const loc = cleanPatch.location || cleanPatch.address;
+    cleanPatch.location = loc;
+    cleanPatch.address = loc;
+  }
+  if (cleanPatch.name || cleanPatch.hospitalName) {
+    const hName = cleanPatch.name || cleanPatch.hospitalName;
+    cleanPatch.name = hName;
+    cleanPatch.hospitalName = hName;
+  }
+
   return hospitals.update(hospitalId, cleanPatch);
 }
 
 export async function removeHospital(hospitalId) {
   return hospitals.remove(hospitalId);
 }
-

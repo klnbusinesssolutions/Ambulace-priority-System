@@ -9,6 +9,7 @@ import Modal from "../../components/ui/Modal.jsx";
 import PageHeader from "../../components/ui/PageHeader.jsx";
 import Select from "../../components/ui/Select.jsx";
 import { useOps } from "../../context/OpsContext.jsx";
+import { useOverlay } from "../../context/OverlayContext.jsx";
 import { matchesSearch } from "../../utils/formatters.js";
 import { validateAmbulanceForm, formatMedicalCapabilities } from "../../utils/ambulanceValidation.js";
 
@@ -24,6 +25,7 @@ function ambulanceDocuments(ambulance) {
 
 export default function Ambulances() {
   const { ambulances, hospitals, pendingAmbulancesActions } = useOps();
+  const { openDrawer } = useOverlay();
   const [query, setQuery] = useState("");
   const [hospitalId, setHospitalId] = useState("All hospitals");
   const [selected, setSelected] = useState(null);
@@ -33,7 +35,7 @@ export default function Ambulances() {
   const [errorMsg, setErrorMsg] = useState("");
   const [fieldErrors, setFieldErrors] = useState({});
 
-  const hospitalOptions = ["All hospitals", ...Array.from(new Set(ambulances.map((unit) => unit.hospitalId)))];
+  const hospitalOptions = ["All hospitals", ...Array.from(new Set(ambulances.map((unit) => unit.hospitalId).filter(Boolean)))];
 
   const rows = useMemo(
     () =>
@@ -112,6 +114,7 @@ export default function Ambulances() {
         onEdit={openEdit}
         onViewDetails={(row) => { setSelected(row); setModal("details"); }}
         onViewDocuments={(row) => { setSelected(row); setModal("documents"); }}
+        onRowClick={(row) => openDrawer({ type: "ambulance", item: row })}
       />
 
       <Modal

@@ -156,8 +156,8 @@ export const demoLiveLocations = [
 ];
 
 export const demoNotifications = [
-  { id: "NTF001", hospitalId: "HSP01", type: "driver_approved", title: "Driver Approved", message: "Your driver has been approved", read: false, createdAt: "2026-07-03T07:00:00+05:30" },
-  { id: "NTF002", hospitalId: "HSP02", type: "ambulance_rejected", title: "Ambulance Rejected", message: "Ambulance KA03CD5678 documents need review", read: true, createdAt: "2026-07-02T18:00:00+05:30" },
+  { id: "NTF001", hospitalId: "HSP01", type: "driver_approved", title: "✓ Driver Approved", message: "Driver Rahul Sharma has been approved", read: true, resolved: true, status: "resolved", createdAt: "2026-07-03T07:00:00+05:30", resolvedAt: "2026-07-03T07:00:00+05:30" },
+  { id: "NTF002", hospitalId: "HSP02", type: "ambulance_rejected", title: "✕ Ambulance Rejected", message: "Ambulance KA03CD5678 documents need review", read: true, resolved: true, status: "resolved", createdAt: "2026-07-02T18:00:00+05:30", resolvedAt: "2026-07-02T18:00:00+05:30" },
 ];
 
 export const demoActivityLogs = [
