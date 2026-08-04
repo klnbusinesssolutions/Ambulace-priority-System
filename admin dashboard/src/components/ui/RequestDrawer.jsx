@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { ExternalLink, X, User, Ambulance, Building2, ShieldCheck, FileText, Eye, Check, Loader2 } from "lucide-react";
 import { useOps } from "../../context/OpsContext.jsx";
 import { formatDateTime } from "../../utils/formatters.js";
+import { getHospitalDisplayId } from "../../utils/entityDisplay.js";
 import { VERIFICATION_STATUS } from "../../firebase/collections.js";
 import { resolveNotificationByTargetId } from "../../services/firestore/notificationsService.js";
 import Button from "./Button.jsx";
@@ -324,7 +325,7 @@ export default function RequestDrawer({
                     </div>
 
                     <Detail label="Hospital Name" value={record.name || record.hospitalName} />
-                    <Detail label="Hospital ID" value={record.hospitalId || record.id} />
+                    <Detail label="Hospital Code" value={record.hospitalCode || getHospitalDisplayId(record)} />
                     <Detail label="Phone Number" value={record.phone} />
                     <Detail label="Email Address" value={record.email} />
                     <Detail label="City / State" value={`${record.city || "—"}, ${record.state || "—"}`} />

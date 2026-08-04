@@ -12,6 +12,7 @@ import {
 import { useOps } from "../../context/OpsContext.jsx";
 import { useOverlay } from "../../context/OverlayContext.jsx";
 import { matchesSearch } from "../../utils/formatters.js";
+import { getEmergencyDisplayId, getHospitalDisplayId } from "../../utils/entityDisplay.js";
 
 function SearchHighlight({ text = "", query = "" }) {
   if (!query || !text) return <span>{text}</span>;
@@ -311,7 +312,7 @@ export default function GlobalSearch() {
                             <SearchHighlight text={h.name || h.hospitalName} query={searchTerm} />
                           </p>
                           <p className="text-xs text-slate-500 dark:text-slate-400">
-                            <SearchHighlight text={`${h.city || "—"}, ${h.state || "—"}`} query={searchTerm} /> · ID: {h.hospitalId || h.id}
+                            <SearchHighlight text={`${h.city || "—"}, ${h.state || "—"}`} query={searchTerm} /> · Code: {h.hospitalCode || getHospitalDisplayId(h)}
                           </p>
                         </div>
                       </ResultItem>
@@ -363,7 +364,7 @@ export default function GlobalSearch() {
                             <SearchHighlight text={plate} query={searchTerm} />
                           </p>
                           <p className="text-xs text-slate-500 dark:text-slate-400">
-                            <SearchHighlight text={a.vehicleType || "Standard ICU"} query={searchTerm} /> · Hospital: {a.hospitalId}
+                            <SearchHighlight text={a.vehicleType || "Standard ICU"} query={searchTerm} /> · Hospital: {a.hospitalName || a.hospitalId || "Assigned"}
                           </p>
                         </div>
                       </ResultItem>
@@ -377,6 +378,7 @@ export default function GlobalSearch() {
                   {searchResults.emergencies.map((e) => {
                     const flatIdx = flatResults.findIndex((r) => r.item === e);
                     const isSelected = selectedIndex === flatIdx;
+                    const emgDisplay = getEmergencyDisplayId(e);
                     return (
                       <ResultItem
                         key={e.id}
@@ -385,7 +387,7 @@ export default function GlobalSearch() {
                       >
                         <div>
                           <p className="font-semibold text-slate-900 dark:text-slate-100 flex items-center gap-2">
-                            <span><SearchHighlight text={e.id} query={searchTerm} /></span>
+                            <span><SearchHighlight text={emgDisplay} query={searchTerm} /></span>
                             <span className="text-[10px] uppercase font-bold text-red-600 dark:text-red-400">({e.priority})</span>
                           </p>
                           <p className="text-xs text-slate-500 dark:text-slate-400">

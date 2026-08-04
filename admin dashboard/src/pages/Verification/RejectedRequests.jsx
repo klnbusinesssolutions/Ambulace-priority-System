@@ -134,7 +134,7 @@ export default function RejectedRequests() {
           {errorMsg}
         </div>
       )}
-      <div className="grid gap-3 rounded-lg border border-slate-200 bg-white p-4 md:grid-cols-[minmax(220px,1fr)_200px]">
+      <div className="grid gap-3 rounded-lg border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900 md:grid-cols-[minmax(220px,1fr)_200px]">
         <Input placeholder="Search rejected requests..." value={query} onChange={(event) => setQuery(event.target.value)} />
         <Select value={type} onChange={(event) => setType(event.target.value)} options={["All types", "Driver", "Ambulance", "Police Officer"]} />
       </div>

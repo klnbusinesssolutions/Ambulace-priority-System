@@ -17,6 +17,7 @@ import {
 } from "lucide-react";
 import { useOps } from "../../context/OpsContext.jsx";
 import { formatDateTime } from "../../utils/formatters.js";
+import { getEmergencyDisplayId, resolveHospitalName } from "../../utils/entityDisplay.js";
 import Button from "../ui/Button.jsx";
 import StatusBadge from "../ui/StatusBadge.jsx";
 import VerificationStatusBadge from "../ui/VerificationStatusBadge.jsx";
@@ -220,8 +221,8 @@ export default function AmbulanceDetailsDrawer({ open, ambulance, onClose }) {
                 {completedEmergencies.slice(0, 5).map((e) => (
                   <div key={e.id} className="flex items-center justify-between text-xs py-1.5 border-b border-slate-50">
                     <div>
-                      <p className="font-medium text-slate-900">{e.id} · {e.patientName || "Emergency"}</p>
-                      <p className="text-[11px] text-slate-400">{e.hospitalId}</p>
+                      <p className="font-medium text-slate-900 font-mono">{getEmergencyDisplayId(e)} · {e.patientName || "Emergency"}</p>
+                      <p className="text-[11px] text-slate-400">{resolveHospitalName(e.hospitalId, hospitals)}</p>
                     </div>
                     <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-semibold text-emerald-700">
                       Completed

@@ -19,6 +19,7 @@ import {
 } from "lucide-react";
 import { useOps } from "../../context/OpsContext.jsx";
 import { formatDateTime } from "../../utils/formatters.js";
+import { resolveAmbulancePlate } from "../../utils/entityDisplay.js";
 import Button from "../ui/Button.jsx";
 import StatusBadge from "../ui/StatusBadge.jsx";
 import VerificationStatusBadge from "../ui/VerificationStatusBadge.jsx";
@@ -235,7 +236,7 @@ export default function HospitalDetailsDrawer({ open, hospital, onClose }) {
                         <span className="font-bold text-red-600 uppercase">{emergency.priority || "P1 Critical"}</span>
                         <span className="text-slate-700 font-medium">{emergency.patientName || emergency.patient || "Patient"}</span>
                       </div>
-                      <p className="text-[11px] text-slate-500 mt-0.5">Assigned: {emergency.ambulanceId || emergency.assignedAmbulance || "Units en route"}</p>
+                      <p className="text-[11px] text-slate-500 mt-0.5">Assigned: {resolveAmbulancePlate(emergency.ambulanceId || emergency.assignedAmbulance, ambulances)}</p>
                     </div>
                     <div className="text-right">
                       <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold text-amber-800">

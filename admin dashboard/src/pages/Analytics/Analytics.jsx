@@ -32,6 +32,7 @@ import StatusBadge from "../../components/ui/StatusBadge.jsx";
 import { useOps } from "../../context/OpsContext.jsx";
 import { formatDateTime } from "../../utils/formatters.js";
 import { calculateEmergencyAnalyticsData, safeParseDate } from "../../utils/analyticsAggregator.js";
+import { getEmergencyDisplayId } from "../../utils/entityDisplay.js";
 
 const PRIORITY_COLORS = {
   critical: "#dc2626",
@@ -71,9 +72,13 @@ export default function Analytics() {
         const recordDate = safeParseDate(record.createdAt);
         if (recordDate) {
           const diffDays = (now - recordDate) / (1000 * 60 * 60 * 24);
-          if (timeRangeFilter === "today") matchesTime = diffDays <= 1;
-          else if (timeRangeFilter === "7days") matchesTime = diffDays <= 7;
-          else if (timeRangeFilter === "30days") matchesTime = diffDays <= 30;
+          if (timeRangeFilter === "today") {
+            matchesTime = recordDate.toDateString() === now.toDateString();
+          } else if (timeRangeFilter === "7days") {
+            matchesTime = diffDays >= 0 && diffDays <= 7;
+          } else if (timeRangeFilter === "30days") {
+            matchesTime = diffDays >= 0 && diffDays <= 30;
+          }
         }
       }
 
@@ -81,32 +86,37 @@ export default function Analytics() {
     });
   }, [combinedAnalytics, searchTerm, hospitalFilter, priorityFilter, timeRangeFilter]);
 
-  // Aggregate KPI Statistics
+  // Aggregate KPI Statistics with strict null/N/A exclusion for averages
   const stats = useMemo(() => {
     const total = filteredData.length;
     if (total === 0) {
       return {
-        avgResponseTime: "0.0",
-        avgDuration: "0.0",
+        avgResponseTime: "N/A",
+        avgDuration: "N/A",
         totalIncidents: 0,
-        efficiencyRate: 100,
+        efficiencyRate: "100%",
         criticalCount: 0,
       };
     }
 
-    const sumResponse = filteredData.reduce((sum, item) => sum + (Number(item.responseTime) || 0), 0);
-    const sumDuration = filteredData.reduce(
-      (sum, item) => sum + (Number(item.totalDuration) || Number(item.duration) || 0),
-      0,
+    const validResponseItems = filteredData.filter(
+      (item) => item.responseTime !== null && item.responseTime !== undefined && !isNaN(Number(item.responseTime))
     );
-    const fastResponses = filteredData.filter((item) => (Number(item.responseTime) || 0) <= 10).length;
+    const validDurationItems = filteredData.filter(
+      (item) => item.totalDuration !== null && item.totalDuration !== undefined && !isNaN(Number(item.totalDuration))
+    );
+
+    const sumResponse = validResponseItems.reduce((sum, item) => sum + Number(item.responseTime), 0);
+    const sumDuration = validDurationItems.reduce((sum, item) => sum + Number(item.totalDuration), 0);
+
+    const fastResponses = validResponseItems.filter((item) => Number(item.responseTime) <= 10).length;
     const criticalCount = filteredData.filter((item) => item.priority === "critical").length;
 
     return {
-      avgResponseTime: (sumResponse / total).toFixed(1),
-      avgDuration: (sumDuration / total).toFixed(1),
+      avgResponseTime: validResponseItems.length > 0 ? (sumResponse / validResponseItems.length).toFixed(1) : "N/A",
+      avgDuration: validDurationItems.length > 0 ? (sumDuration / validDurationItems.length).toFixed(1) : "N/A",
       totalIncidents: total,
-      efficiencyRate: Math.round((fastResponses / total) * 100),
+      efficiencyRate: validResponseItems.length > 0 ? Math.round((fastResponses / validResponseItems.length) * 100) : "N/A",
       criticalCount,
     };
   }, [filteredData]);
@@ -129,21 +139,24 @@ export default function Analytics() {
     ].filter((item) => item.value > 0);
   }, [filteredData]);
 
-  // Hospital Comparison Bar Chart Data
+  // Hospital Comparison Bar Chart Data (only averages valid response times)
   const hospitalChartData = useMemo(() => {
     const hospitalGroup = {};
     filteredData.forEach((item) => {
       const name = item.hospitalName || "Unknown";
       if (!hospitalGroup[name]) {
-        hospitalGroup[name] = { totalResponse: 0, count: 0 };
+        hospitalGroup[name] = { totalResponse: 0, validCount: 0, count: 0 };
       }
-      hospitalGroup[name].totalResponse += Number(item.responseTime) || 0;
+      if (item.responseTime !== null && item.responseTime !== undefined && !isNaN(Number(item.responseTime))) {
+        hospitalGroup[name].totalResponse += Number(item.responseTime);
+        hospitalGroup[name].validCount += 1;
+      }
       hospitalGroup[name].count += 1;
     });
 
     return Object.entries(hospitalGroup).map(([name, data]) => ({
       hospital: name.length > 15 ? `${name.substring(0, 13)}...` : name,
-      avgResponse: Number((data.totalResponse / data.count).toFixed(1)),
+      avgResponse: data.validCount > 0 ? Number((data.totalResponse / data.validCount).toFixed(1)) : 0,
       incidents: data.count,
     }));
   }, [filteredData]);
@@ -152,9 +165,9 @@ export default function Analytics() {
   const tableColumns = [
     {
       key: "emergencyId",
-      header: "Incident ID",
+      header: "Incident Ref",
       render: (row) => (
-        <span className="font-semibold text-slate-900 dark:text-slate-100">{row.emergencyId || row.id}</span>
+        <span className="font-semibold text-slate-900 dark:text-slate-100 font-mono">{getEmergencyDisplayId(row)}</span>
       ),
     },
     {
@@ -187,21 +200,23 @@ export default function Analytics() {
       render: (row) => (
         <span
           className={`font-semibold ${
-            (row.responseTime || 0) <= 8
-              ? "text-emerald-600 dark:text-emerald-400"
-              : (row.responseTime || 0) <= 12
-                ? "text-amber-600 dark:text-amber-400"
-                : "text-red-600 dark:text-red-400"
+            row.responseTime !== null && row.responseTime !== undefined
+              ? row.responseTime <= 8
+                ? "text-emerald-600 dark:text-emerald-400"
+                : row.responseTime <= 12
+                  ? "text-amber-600 dark:text-amber-400"
+                  : "text-red-600 dark:text-red-400"
+              : "text-slate-400"
           }`}
         >
-          {row.responseTime ? `${row.responseTime} mins` : "N/A"}
+          {row.responseTime !== null && row.responseTime !== undefined ? `${row.responseTime} mins` : "N/A"}
         </span>
       ),
     },
     {
       key: "totalDuration",
       header: "Total Duration",
-      render: (row) => (row.totalDuration || row.duration ? `${row.totalDuration || row.duration} mins` : "N/A"),
+      render: (row) => (row.totalDuration !== null && row.totalDuration !== undefined ? `${row.totalDuration} mins` : "N/A"),
     },
     {
       key: "createdAt",
@@ -224,7 +239,9 @@ export default function Analytics() {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm font-medium text-slate-500">Avg Response Time</p>
-                <p className="mt-2 text-2xl font-bold text-slate-950 dark:text-white">{stats.avgResponseTime}m</p>
+                <p className="mt-2 text-2xl font-bold text-slate-950 dark:text-white">
+                  {stats.avgResponseTime === "N/A" ? "N/A" : `${stats.avgResponseTime}m`}
+                </p>
               </div>
               <div className="grid h-10 w-10 place-items-center rounded-lg bg-amber-50 dark:bg-amber-950/40 text-amber-600 dark:text-amber-400">
                 <Clock className="h-5 w-5" />
@@ -239,7 +256,9 @@ export default function Analytics() {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm font-medium text-slate-500">Avg Total Duration</p>
-                <p className="mt-2 text-2xl font-bold text-slate-950 dark:text-white">{stats.avgDuration}m</p>
+                <p className="mt-2 text-2xl font-bold text-slate-950 dark:text-white">
+                  {stats.avgDuration === "N/A" ? "N/A" : `${stats.avgDuration}m`}
+                </p>
               </div>
               <div className="grid h-10 w-10 place-items-center rounded-lg bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400">
                 <Truck className="h-5 w-5" />
@@ -269,7 +288,9 @@ export default function Analytics() {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm font-medium text-slate-500">Target Response Rate</p>
-                <p className="mt-2 text-2xl font-bold text-slate-950 dark:text-white">{stats.efficiencyRate}%</p>
+                <p className="mt-2 text-2xl font-bold text-slate-950 dark:text-white">
+                  {stats.efficiencyRate === "N/A" ? "N/A" : `${stats.efficiencyRate}%`}
+                </p>
               </div>
               <div className="grid h-10 w-10 place-items-center rounded-lg bg-teal-50 dark:bg-teal-950/40 text-teal-600 dark:text-teal-400">
                 <CheckCircle2 className="h-5 w-5" />
@@ -312,11 +333,12 @@ export default function Analytics() {
                 <BarChart data={hospitalChartData}>
                   <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
                   <XAxis dataKey="hospital" tickLine={false} axisLine={false} fontSize={12} />
-                  <YAxis tickLine={false} axisLine={false} fontSize={12} unit="m" allowDecimals={false} />
+                  <YAxis yAxisId="left" tickLine={false} axisLine={false} fontSize={12} unit="m" allowDecimals={false} />
+                  <YAxis yAxisId="right" orientation="right" tickLine={false} axisLine={false} fontSize={12} allowDecimals={false} />
                   <Tooltip cursor={{ fill: "#f8fafc" }} />
                   <Legend />
-                  <Bar dataKey="avgResponse" name="Avg Response (m)" fill="#2563eb" radius={[4, 4, 0, 0]} />
-                  <Bar dataKey="incidents" name="Total Incidents" fill="#64748b" radius={[4, 4, 0, 0]} />
+                  <Bar yAxisId="left" dataKey="avgResponse" name="Avg Response (m)" fill="#2563eb" radius={[4, 4, 0, 0]} />
+                  <Bar yAxisId="right" dataKey="incidents" name="Total Incidents" fill="#64748b" radius={[4, 4, 0, 0]} />
                 </BarChart>
               </ResponsiveContainer>
             )}

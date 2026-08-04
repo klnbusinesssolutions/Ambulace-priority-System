@@ -104,7 +104,7 @@ export default function Ambulances() {
         description="Active fleet — pending_ambulances documents with status: approved."
         actions={<Button onClick={openAdd}><Plus className="h-4 w-4" />Add ambulance</Button>}
       />
-      <div className="grid gap-3 rounded-lg border border-slate-200 bg-white p-4 md:grid-cols-[minmax(220px,1fr)_240px]">
+      <div className="grid gap-3 rounded-lg border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900 md:grid-cols-[minmax(220px,1fr)_240px]">
         <Input placeholder="Search vehicle number..." value={query} onChange={(event) => setQuery(event.target.value)} />
         <Select value={hospitalId} onChange={(event) => setHospitalId(event.target.value)} options={hospitalOptions} />
       </div>

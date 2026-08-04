@@ -5,6 +5,15 @@ import StatusBadge from "../ui/StatusBadge.jsx";
 import { useOverlay } from "../../context/OverlayContext.jsx";
 import { formatTimeAgo } from "../../utils/formatters.js";
 
+import { useOps } from "../../context/OpsContext.jsx";
+import {
+  resolveAmbulancePlate,
+  resolveDriverName,
+  resolveHospitalName,
+  getEmergencyDisplayId,
+} from "../../utils/entityDisplay.js";
+import { EMERGENCY_STATUS_LABELS, normalizeEmergencyStatus } from "../../utils/emergencyLifecycle.js";
+
 const PRIORITY_ACCENTS = {
   critical: "border-l-red-600 bg-red-50/20 dark:bg-red-950/10",
   high: "border-l-amber-600 bg-amber-50/20 dark:bg-amber-950/10",
@@ -19,16 +28,9 @@ const PRIORITY_LABELS = {
   low: "Low",
 };
 
-const STATUS_LABELS = {
-  active: "Active Dispatch",
-  dispatched: "Dispatched",
-  arrived: "En Route to Hosp",
-  completed: "Completed",
-  resolved: "Resolved",
-};
-
 export default function ActiveEmergenciesPanel({ emergencies = [] }) {
   const { openDrawer } = useOverlay();
+  const { ambulances = [], drivers = [], hospitals = [] } = useOps();
 
   return (
     <Card>
@@ -57,8 +59,10 @@ export default function ActiveEmergenciesPanel({ emergencies = [] }) {
               const accentClass = PRIORITY_ACCENTS[priorityKey] || PRIORITY_ACCENTS.medium;
               const patientName = item.patientName || item.patient || "Anonymous Patient";
               const incidentTitle = item.incidentType || "Emergency Incident";
-              const hospName = item.hospitalName || item.hospitalId || "Assigned Hospital";
-              const ambInfo = item.ambulanceId ? `${item.ambulanceId}${item.driverName ? ` · ${item.driverName}` : ""}` : "Unit Pending";
+              const hospName = resolveHospitalName(item.hospitalName || item.hospitalId, hospitals);
+              const ambPlate = resolveAmbulancePlate(item.ambulanceId, ambulances);
+              const drvName = resolveDriverName(item.driverName || item.driverId, drivers);
+              const ambInfo = item.ambulanceId ? `${ambPlate}${drvName ? ` · ${drvName}` : ""}` : "Unit Pending";
               const timeAgo = formatTimeAgo(item.createdAt || item.startTime || item.timestamp);
 
               return (
@@ -95,7 +99,7 @@ export default function ActiveEmergenciesPanel({ emergencies = [] }) {
                   </div>
 
                   <div className="flex items-center gap-2">
-                    <StatusBadge status={STATUS_LABELS[item.status] || item.status || "Dispatched"} />
+                    <StatusBadge status={EMERGENCY_STATUS_LABELS[normalizeEmergencyStatus(item.status)] || "Reported"} />
                   </div>
 
                   <div className="text-left md:text-right">

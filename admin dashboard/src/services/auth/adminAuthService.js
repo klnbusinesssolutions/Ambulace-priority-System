@@ -2,6 +2,7 @@ import { getFirebaseAuth, hasFirebaseConfig } from "../../firebase/client.js";
 import { REQUIRED_ADMIN_ROLE } from "../../firebase/collections.js";
 import { ensureAdminByUid, getAdminByUid, updateAdmin, removeAdmin } from "../firestore/adminsService.js";
 import { logAdminLogin } from "../firestore/loginHistoryService.js";
+import { parseUserAgent, getClientLocationAndIp } from "../../utils/deviceLocation.js";
 
 /**
  * Sign in with email/password, then confirm the account is an active
@@ -31,25 +32,24 @@ export async function signInAdmin(email, password) {
     throw new Error("This console is for super admins only.");
   }
 
-  // Log successful login
+  // Log successful login with real client metadata
   try {
-    const ua = typeof navigator !== "undefined" ? navigator.userAgent : "";
-    let browser = "Chrome";
-    let os = "Windows";
-    if (ua.includes("Firefox")) browser = "Firefox";
-    else if (ua.includes("Safari") && !ua.includes("Chrome")) browser = "Safari";
-    else if (ua.includes("Edg")) browser = "Edge";
-    if (ua.includes("Mac")) os = "macOS";
-    else if (ua.includes("Linux")) os = "Linux";
+    const { browser, os, device } = parseUserAgent();
+    const { ip, location } = await getClientLocationAndIp();
 
-    await logAdminLogin({
+    const sessionRecord = await logAdminLogin({
       uid: credential.user.uid,
-      email: credential.user.email,
+      email: credential.user.email || email,
       browser,
       os,
-      ip: "192.168.1.100",
-      location: "HQ Console",
+      device,
+      ip,
+      location,
     });
+
+    if (typeof window !== "undefined" && sessionRecord?.sessionId) {
+      sessionStorage.setItem("ambugrid_current_session_id", sessionRecord.sessionId);
+    }
   } catch (e) {
     console.error("Failed to log admin login history:", e);
   }

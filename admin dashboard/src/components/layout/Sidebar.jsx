@@ -52,13 +52,13 @@ export default function Sidebar({ collapsed, mobileOpen, onCloseMobile, onToggle
     >
       <div className="flex h-16 items-center justify-between border-b border-slate-100 dark:border-slate-800 px-4">
         <div className="flex min-w-0 items-center gap-3">
-          <div className="grid h-9 w-9 shrink-0 place-items-center rounded-md bg-slate-950 dark:bg-emerald-600 text-sm font-semibold text-white">
+          <div className="grid h-9 w-9 shrink-0 place-items-center rounded-md bg-slate-950 dark:bg-blue-600 text-sm font-extrabold text-white shadow-xs">
             AG
           </div>
           {!collapsed && (
             <div className="min-w-0">
-              <p className="truncate text-sm font-semibold text-slate-950 dark:text-slate-100">AmbuGrid</p>
-              <p className="truncate text-xs text-slate-500 dark:text-slate-400">Super Admin Panel</p>
+              <p className="truncate text-sm font-bold text-slate-950 dark:text-slate-100">AmbuGrid</p>
+              <p className="truncate text-xs text-slate-500 dark:text-slate-300">Super Admin Panel</p>
             </div>
           )}
         </div>
@@ -73,7 +73,7 @@ export default function Sidebar({ collapsed, mobileOpen, onCloseMobile, onToggle
             <div key={item.label} className="space-y-1">
               <div
                 className={cn(
-                  "flex h-10 items-center gap-3 rounded-md px-3 text-sm font-medium text-slate-600 dark:text-slate-400",
+                  "flex h-10 items-center gap-3 rounded-md px-3 text-sm font-semibold text-slate-600 dark:text-slate-300",
                   collapsed && "justify-center px-0",
                 )}
                 title={collapsed ? item.label : undefined}
@@ -91,8 +91,8 @@ export default function Sidebar({ collapsed, mobileOpen, onCloseMobile, onToggle
                       cn(
                         "ml-7 flex h-8 items-center rounded-md px-3 text-sm font-medium transition",
                         isActive
-                          ? "bg-slate-950 text-white dark:bg-slate-100 dark:text-slate-950"
-                          : "text-slate-500 hover:bg-slate-100 hover:text-slate-950 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-100",
+                          ? "bg-slate-950 text-white dark:bg-blue-600 dark:text-white font-bold shadow-xs"
+                          : "text-slate-500 hover:bg-slate-100 hover:text-slate-950 dark:text-slate-300 dark:hover:bg-slate-800 dark:hover:text-slate-100",
                       )
                     }
                   >
@@ -109,8 +109,8 @@ export default function Sidebar({ collapsed, mobileOpen, onCloseMobile, onToggle
                 cn(
                   "flex h-10 items-center gap-3 rounded-md px-3 text-sm font-medium transition",
                   isActive
-                    ? "bg-slate-950 text-white dark:bg-slate-100 dark:text-slate-950"
-                    : "text-slate-600 hover:bg-slate-100 hover:text-slate-950 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-100",
+                    ? "bg-slate-950 text-white dark:bg-blue-600 dark:text-white font-bold shadow-xs"
+                    : "text-slate-600 hover:bg-slate-100 hover:text-slate-950 dark:text-slate-300 dark:hover:bg-slate-800 dark:hover:text-slate-100",
                   collapsed && "justify-center px-0",
                 )
               }

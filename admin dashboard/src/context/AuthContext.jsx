@@ -1,6 +1,8 @@
 import { createContext, useContext, useEffect, useMemo, useState } from "react";
 import { hasFirebaseConfig } from "../firebase/client.js";
 import { onAdminAuthChange, signInAdmin, signOutAdmin } from "../services/auth/adminAuthService.js";
+import { parseUserAgent, getClientLocationAndIp } from "../utils/deviceLocation.js";
+import { logAdminLogin } from "../services/firestore/loginHistoryService.js";
 
 const AuthContext = createContext(null);
 const demoStorageKey = "ambugrid-demo-authenticated";
@@ -22,8 +24,6 @@ export function AuthProvider({ children }) {
 
   useEffect(() => {
     if (!firebaseReady) {
-      // No Firebase project configured yet — fall back to a local demo
-      // session so the dashboard can still be previewed end to end.
       if (window.sessionStorage.getItem(demoStorageKey) === "true") {
         setAdmin(demoAdmin);
       }
@@ -52,6 +52,24 @@ export function AuthProvider({ children }) {
         if (!firebaseReady) {
           window.sessionStorage.setItem(demoStorageKey, "true");
           setAdmin(demoAdmin);
+          try {
+            const { browser, os, device } = parseUserAgent();
+            const { ip, location } = await getClientLocationAndIp();
+            const record = await logAdminLogin({
+              uid: demoAdmin.uid,
+              email: demoAdmin.email,
+              browser,
+              os,
+              device,
+              ip,
+              location,
+            });
+            if (record?.sessionId) {
+              window.sessionStorage.setItem("ambugrid_current_session_id", record.sessionId);
+            }
+          } catch (e) {
+            console.error("Demo login history error:", e);
+          }
           return demoAdmin;
         }
         const signedInAdmin = await signInAdmin(email, password);

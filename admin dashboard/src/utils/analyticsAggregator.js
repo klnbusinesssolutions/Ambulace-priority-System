@@ -291,11 +291,55 @@ export function calculateKPIStats({
   };
 }
 
+function resolveLifecycleMetrics(item) {
+  const dispatchDate = safeParseDate(item.dispatchTime || item.startTime || item.createdAt || item.timestamp);
+  const arrivedDate = safeParseDate(item.arrivedTime || item.pickupTime || item.arrivedAt);
+  const completedDate = safeParseDate(item.completedTime || item.resolvedAt || item.completedAt);
+  const startDate = safeParseDate(item.startTime || item.createdAt || item.timestamp);
+
+  // Response Time Resolution
+  let responseMins = null;
+  if (dispatchDate && arrivedDate) {
+    if (arrivedDate >= dispatchDate) {
+      responseMins = Math.max(0, Math.round((arrivedDate - dispatchDate) / 60000));
+    } else {
+      // Impossible ordering (arrived before dispatch) -> flag invalid (null)
+      responseMins = null;
+    }
+  } else if (
+    item.responseTime !== undefined &&
+    item.responseTime !== null &&
+    item.responseTime !== "" &&
+    !isNaN(Number(item.responseTime))
+  ) {
+    const val = Number(item.responseTime);
+    if (val >= 0) responseMins = val;
+  }
+
+  // Total Duration Resolution
+  let durationMins = null;
+  if (startDate && completedDate) {
+    if (completedDate >= startDate) {
+      durationMins = Math.max(0, Math.round((completedDate - startDate) / 60000));
+    } else {
+      // Impossible ordering (completed before start) -> flag invalid (null)
+      durationMins = null;
+    }
+  } else if (
+    (item.totalDuration !== undefined && item.totalDuration !== null && item.totalDuration !== "" && !isNaN(Number(item.totalDuration))) ||
+    (item.duration !== undefined && item.duration !== null && item.duration !== "" && !isNaN(Number(item.duration)))
+  ) {
+    const val = Number(item.totalDuration || item.duration);
+    if (val >= 0) durationMins = val;
+  }
+
+  return { responseMins, durationMins };
+}
+
 /**
  * Aggregates Emergency & Analytics metrics strictly from Firestore data (NO FAKE / RANDOM DATA).
  */
 export function calculateEmergencyAnalyticsData(analyticsList = [], emergenciesList = [], hospitalsList = []) {
-  const combined = [];
   const hospitalNameMap = new Map();
 
   (hospitalsList || []).forEach((h) => {
@@ -303,57 +347,50 @@ export function calculateEmergencyAnalyticsData(analyticsList = [], emergenciesL
     if (id) hospitalNameMap.set(id, h.name || h.hospitalName || id);
   });
 
-  // 1. If explicit analytics records exist, use them
-  if (analyticsList && analyticsList.length > 0) {
-    analyticsList.forEach((item, idx) => {
-      const hospName = item.hospitalName || hospitalNameMap.get(item.hospitalId) || item.hospitalId || "N/A";
-      combined.push({
-        id: item.id || `ANALYSIS-${idx + 1}`,
-        emergencyId: item.emergencyId || item.id,
-        hospitalId: item.hospitalId || "N/A",
-        hospitalName: hospName,
-        driverId: item.driverId || "N/A",
-        driverName: item.driverName || "Assigned Driver",
-        ambulanceId: item.ambulanceId || "N/A",
-        responseTime: Number(item.responseTime) || 0,
-        totalDuration: Number(item.totalDuration || item.duration) || 0,
-        priority: (item.priority || "medium").toLowerCase(),
-        incidentType: item.incidentType || "Emergency Response",
-        createdAt: item.createdAt || item.timestamp || new Date().toISOString(),
-      });
+  const emergencyMap = new Map();
+
+  // 1. Process explicit analytics records
+  (analyticsList || []).forEach((item, idx) => {
+    const key = item.emergencyId || item.id || `ANALYSIS-${idx + 1}`;
+    const hospName = item.hospitalName || hospitalNameMap.get(item.hospitalId) || item.hospitalId || "N/A";
+
+    const { responseMins, durationMins } = resolveLifecycleMetrics(item);
+
+    emergencyMap.set(key, {
+      id: item.id || `AN-${key}`,
+      emergencyId: key,
+      hospitalId: item.hospitalId || "N/A",
+      hospitalName: hospName,
+      driverId: item.driverId || "N/A",
+      driverName: item.driverName || "Assigned Driver",
+      ambulanceId: item.ambulanceId || "N/A",
+      responseTime: responseMins,
+      totalDuration: durationMins,
+      priority: (item.priority || "medium").toLowerCase(),
+      incidentType: item.incidentType || "Emergency Response",
+      createdAt: item.createdAt || item.timestamp || new Date().toISOString(),
     });
-  } else if (emergenciesList && emergenciesList.length > 0) {
-    // 2. Otherwise derive metrics from emergencies collection using real timestamps
-    emergenciesList.forEach((e, idx) => {
-      const hospName = hospitalNameMap.get(e.hospitalId) || e.hospitalId || "N/A";
+  });
 
-      // Compute response time in minutes from dispatchTime -> arrivedTime or startTime
-      let responseMins = Number(e.responseTime);
-      if (isNaN(responseMins) || responseMins <= 0) {
-        const start = safeParseDate(e.dispatchTime || e.startTime || e.createdAt);
-        const end = safeParseDate(e.arrivedTime || e.pickupTime || e.updatedAt);
-        if (start && end && end > start) {
-          responseMins = Math.round((end - start) / 60000);
-        } else {
-          responseMins = e.priority === "critical" ? 6 : e.priority === "high" ? 8 : 12;
-        }
-      }
+  // 2. Process emergencies collection and merge/deduplicate
+  (emergenciesList || []).forEach((e, idx) => {
+    const key = e.id || `EMG-${idx + 1}`;
+    const hospName = e.hospitalName || hospitalNameMap.get(e.hospitalId) || e.hospitalId || "N/A";
 
-      // Compute total duration in minutes
-      let durationMins = Number(e.totalDuration || e.duration);
-      if (isNaN(durationMins) || durationMins <= 0) {
-        const start = safeParseDate(e.startTime || e.createdAt);
-        const end = safeParseDate(e.completedTime || e.resolvedAt || e.updatedAt);
-        if (start && end && end > start) {
-          durationMins = Math.round((end - start) / 60000);
-        } else {
-          durationMins = responseMins + 20;
-        }
-      }
+    const { responseMins, durationMins } = resolveLifecycleMetrics(e);
 
-      combined.push({
-        id: `AN-EMG-${e.id || idx + 1}`,
-        emergencyId: e.id,
+    if (emergencyMap.has(key)) {
+      const existing = emergencyMap.get(key);
+      emergencyMap.set(key, {
+        ...existing,
+        responseTime: existing.responseTime !== null ? existing.responseTime : responseMins,
+        totalDuration: existing.totalDuration !== null ? existing.totalDuration : durationMins,
+        hospitalName: existing.hospitalName !== "N/A" ? existing.hospitalName : hospName,
+      });
+    } else {
+      emergencyMap.set(key, {
+        id: `AN-EMG-${key}`,
+        emergencyId: key,
         hospitalId: e.hospitalId || "N/A",
         hospitalName: hospName,
         driverId: e.driverId || "N/A",
@@ -365,8 +402,8 @@ export function calculateEmergencyAnalyticsData(analyticsList = [], emergenciesL
         incidentType: e.incidentType || "Emergency Response",
         createdAt: e.startTime || e.createdAt || new Date().toISOString(),
       });
-    });
-  }
+    }
+  });
 
-  return combined;
+  return Array.from(emergencyMap.values());
 }

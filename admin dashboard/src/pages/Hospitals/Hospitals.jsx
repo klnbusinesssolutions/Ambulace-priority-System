@@ -92,7 +92,7 @@ export default function Hospitals() {
         description="Manage connected hospitals — synced live with the hospitals Firestore collection."
         actions={<Button onClick={openAdd}><Plus className="h-4 w-4" />Add hospital</Button>}
       />
-      <div className="flex flex-col gap-3 rounded-lg border border-slate-200 bg-white p-4 sm:flex-row">
+      <div className="flex flex-col gap-3 rounded-lg border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900 sm:flex-row">
         <Input placeholder="Search hospitals..." value={query} onChange={(event) => setQuery(event.target.value)} />
         <Select className="sm:w-52" value={status} onChange={(event) => setStatus(event.target.value)} options={["All statuses", "Active", "Inactive"]} />
       </div>

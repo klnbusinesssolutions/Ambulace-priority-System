@@ -24,6 +24,7 @@ import {
 import { useOps } from "../../context/OpsContext.jsx";
 import { useOverlay } from "../../context/OverlayContext.jsx";
 import { matchesSearch } from "../../utils/formatters.js";
+import { getEmergencyDisplayId } from "../../utils/entityDisplay.js";
 
 const navigationCommands = [
   { id: "nav-dashboard", label: "Go to Dashboard", category: "Navigation", icon: LayoutDashboard, route: "/admin/dashboard" },
@@ -158,7 +159,7 @@ export default function CommandPalette() {
       ...matchedHospitals.map((h) => ({ id: `hosp-${h.id || h.hospitalId}`, label: h.name || h.hospitalName, detail: `${h.city || "—"} · Hospital`, category: "Search Results", icon: Building2, entityType: "hospital", item: h })),
       ...matchedDrivers.map((d) => ({ id: `drv-${d.id}`, label: d.name || d.fullName || d.driverName, detail: `Driver · ${d.phone || "—"}`, category: "Search Results", icon: User, entityType: "driver", item: d })),
       ...matchedAmbulances.map((a) => ({ id: `amb-${a.id}`, label: a.numberPlate || a.registrationNumber, detail: `Ambulance · ${a.vehicleType || "ICU"}`, category: "Search Results", icon: Ambulance, entityType: "ambulance", item: a })),
-      ...matchedEmergencies.map((e) => ({ id: `emg-${e.id}`, label: `${e.id} (${(e.priority || "Critical").toUpperCase()})`, detail: `${e.patientName || "Emergency"} · ${e.status}`, category: "Search Results", icon: AlertTriangle, entityType: "emergency", item: e })),
+      ...matchedEmergencies.map((e) => ({ id: `emg-${e.id}`, label: `${getEmergencyDisplayId(e)} (${(e.priority || "Critical").toUpperCase()})`, detail: `${e.patientName || "Emergency"} · ${e.status}`, category: "Search Results", icon: AlertTriangle, entityType: "emergency", item: e })),
       ...matchedPolice.map((p) => ({ id: `pol-${p.id}`, label: p.name, detail: `Police Officer · Badge: ${p.badgeId}`, category: "Search Results", icon: ShieldCheck, entityType: "police", item: p })),
     ];
 

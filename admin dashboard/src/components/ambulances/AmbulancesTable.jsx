@@ -23,8 +23,8 @@ export default function AmbulancesTable({
       header: "Vehicle Number",
       render: (row) => (
         <div>
-          <p className="font-medium text-slate-950">{row.numberPlate || row.registrationNumber}</p>
-          <p className="text-xs text-slate-500">{row.id}</p>
+          <p className="font-medium text-slate-950 dark:text-slate-100">{row.numberPlate || row.registrationNumber}</p>
+          <p className="text-xs text-slate-500 dark:text-slate-400">{row.vehicleType ? `${row.vehicleType} Unit` : "Ambulance Unit"}</p>
         </div>
       ),
     },

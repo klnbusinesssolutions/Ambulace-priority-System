@@ -24,10 +24,10 @@
 }
 
 html.dark {
-  --bg-app: #0b1220;
+  --bg-app: #090d16;
   --bg-nav: #111827;
   --bg-card: #1e293b;
-  --bg-drawer: #273449;
+  --bg-drawer: #1e293b;
   --bg-hover: #334155;
   --bg-input: #0f172a;
   --border-primary: #334155;
@@ -56,7 +56,12 @@ body {
 }
 
 html.dark body {
-  background-color: #0b1220;
+  background-color: #090d16;
+  color: #f8fafc;
+}
+
+html.dark option {
+  background-color: #1e293b;
   color: #f8fafc;
 }
 

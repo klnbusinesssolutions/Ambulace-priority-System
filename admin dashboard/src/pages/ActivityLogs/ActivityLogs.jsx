@@ -24,7 +24,7 @@ export default function ActivityLogs() {
   return (
     <div className="space-y-5">
       <PageHeader title="Activity Logs" description="Audit trail from the activity_logs collection — every approval, rejection, and admin action." />
-      <div className="flex flex-col gap-3 rounded-lg border border-slate-200 bg-white p-4 sm:flex-row">
+      <div className="flex flex-col gap-3 rounded-lg border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900 sm:flex-row">
         <Input placeholder="Search logs..." value={query} onChange={(event) => setQuery(event.target.value)} />
         <Select className="sm:w-56" value={action} onChange={(event) => setAction(event.target.value)} options={actions} />
       </div>

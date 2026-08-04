@@ -116,7 +116,7 @@ export default function PendingPoliceOfficers() {
             render: (row) => (
               <div>
                 <p className="font-medium text-slate-950 dark:text-slate-100">{row.name}</p>
-                <p className="text-xs text-slate-500 dark:text-slate-400">{row.id}</p>
+                <p className="text-xs text-slate-500 dark:text-slate-400">{row.badgeId ? `Badge: ${row.badgeId}` : row.email || "Police Escort"}</p>
               </div>
             ),
           },

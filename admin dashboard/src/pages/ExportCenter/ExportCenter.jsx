@@ -21,6 +21,13 @@ import {
 } from "lucide-react";
 import { useOps } from "../../context/OpsContext.jsx";
 import { formatDateTime } from "../../utils/formatters.js";
+import {
+  getEmergencyDisplayId,
+  getHospitalDisplayId,
+  resolveAmbulancePlate,
+  resolveDriverName,
+  resolveHospitalName,
+} from "../../utils/entityDisplay.js";
 import { exportToCSV, exportToExcel, exportToPDF } from "../../utils/exportUtils.js";
 import Button from "../../components/ui/Button.jsx";
 import Input from "../../components/ui/Input.jsx";
@@ -118,7 +125,7 @@ export default function ExportCenter() {
   const { columns, data, title } = useMemo(() => {
     if (selectedModule === "hospitals") {
       const cols = [
-        { key: "hospitalId", header: "Hospital ID" },
+        { key: "hospitalCode", header: "Hospital Code", getValue: (item) => item.hospitalCode || getHospitalDisplayId(item) },
         { key: "name", header: "Hospital Name" },
         { key: "phone", header: "Phone" },
         { key: "email", header: "Email" },
@@ -140,7 +147,6 @@ export default function ExportCenter() {
 
     if (selectedModule === "drivers") {
       const cols = [
-        { key: "id", header: "Driver ID" },
         { key: "name", header: "Driver Name", getValue: (item) => item.name || item.fullName },
         { key: "phone", header: "Phone" },
         { key: "email", header: "Email" },
@@ -164,12 +170,10 @@ export default function ExportCenter() {
 
     if (selectedModule === "ambulances") {
       const cols = [
-        { key: "id", header: "Ambulance ID" },
         { key: "numberPlate", header: "Number Plate", getValue: (item) => item.numberPlate || item.registrationNumber },
-        { key: "registrationNumber", header: "Registration No." },
         { key: "vehicleType", header: "Vehicle Type" },
         { key: "capacity", header: "Capacity" },
-        { key: "hospitalId", header: "Hospital ID" },
+        { key: "hospitalId", header: "Hospital", getValue: (item) => item.hospitalName || item.hospitalId || "Assigned" },
         { key: "availability", header: "Availability" },
         { key: "submittedAt", header: "Approved Date", getValue: (item) => formatDateTime(item.approvedAt || item.submittedAt) },
       ];
@@ -187,14 +191,14 @@ export default function ExportCenter() {
 
     if (selectedModule === "emergencies") {
       const cols = [
-        { key: "id", header: "Emergency ID" },
+        { key: "referenceId", header: "Reference ID", getValue: (item) => getEmergencyDisplayId(item) },
         { key: "patientName", header: "Patient Name" },
         { key: "incidentType", header: "Incident Type" },
         { key: "priority", header: "Priority" },
         { key: "status", header: "Dispatch Status" },
-        { key: "hospitalId", header: "Assigned Hospital" },
-        { key: "ambulanceId", header: "Ambulance" },
-        { key: "driverName", header: "Driver" },
+        { key: "hospitalName", header: "Assigned Hospital", getValue: (item) => resolveHospitalName(item.hospitalName || item.hospitalId, hospitals) },
+        { key: "ambulanceId", header: "Ambulance Plate", getValue: (item) => resolveAmbulancePlate(item.ambulanceId, ambulances) },
+        { key: "driverName", header: "Driver", getValue: (item) => resolveDriverName(item.driverName || item.driverId, drivers) },
         { key: "eta", header: "ETA" },
         { key: "createdAt", header: "Created Time", getValue: (item) => formatDateTime(item.createdAt || item.timestamp) },
       ];
@@ -212,11 +216,10 @@ export default function ExportCenter() {
 
     if (selectedModule === "verifications") {
       const cols = [
-        { key: "id", header: "Request ID" },
         { key: "entityName", header: "Entity Name", getValue: (item) => item.fullName || item.name || item.numberPlate || item.hospitalId },
         { key: "requestType", header: "Entity Type", getValue: (item) => item.numberPlate ? "Ambulance" : item.badgeId ? "Police" : item.licenseNumber ? "Driver" : "Hospital" },
         { key: "status", header: "Status" },
-        { key: "hospitalId", header: "Hospital ID" },
+        { key: "hospitalId", header: "Hospital", getValue: (item) => item.hospitalName || item.hospitalId },
         { key: "submittedAt", header: "Submitted Date", getValue: (item) => formatDateTime(item.submittedAt || item.createdAt) },
       ];
 
@@ -233,7 +236,6 @@ export default function ExportCenter() {
 
     if (selectedModule === "activity") {
       const cols = [
-        { key: "id", header: "Log ID" },
         { key: "action", header: "Action" },
         { key: "details", header: "Details" },
         { key: "performedBy", header: "Performed By" },
@@ -246,7 +248,6 @@ export default function ExportCenter() {
 
     if (selectedModule === "notifications") {
       const cols = [
-        { key: "id", header: "Notification ID" },
         { key: "title", header: "Title" },
         { key: "message", header: "Message" },
         { key: "type", header: "Type" },
@@ -356,7 +357,7 @@ export default function ExportCenter() {
       />
 
       {/* MODULE SELECTOR TABS */}
-      <div className="flex flex-wrap gap-2 border-b border-slate-200 pb-3">
+      <div className="flex flex-wrap gap-2 border-b border-slate-200 dark:border-slate-800 pb-3">
         {moduleTabs.map((tab) => {
           const Icon = tab.icon;
           const isSelected = selectedModule === tab.id;
@@ -367,8 +368,8 @@ export default function ExportCenter() {
               onClick={() => setSelectedModule(tab.id)}
               className={`flex items-center gap-2 rounded-lg px-3.5 py-2 text-xs font-semibold transition ${
                 isSelected
-                  ? "bg-slate-900 text-white shadow-xs"
-                  : "bg-white text-slate-600 border border-slate-200 hover:bg-slate-50"
+                  ? "bg-slate-900 text-white shadow-xs dark:bg-slate-100 dark:text-slate-900"
+                  : "bg-white text-slate-600 border border-slate-200 hover:bg-slate-50 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-300 dark:hover:bg-slate-800"
               }`}
             >
               <Icon className="h-4 w-4" />
@@ -379,25 +380,25 @@ export default function ExportCenter() {
       </div>
 
       {/* FILTER BAR */}
-      <div className="grid gap-3 rounded-xl border border-slate-200 bg-white p-4 sm:grid-cols-2 lg:grid-cols-5">
+      <div className="grid gap-3 rounded-xl border border-slate-200 bg-white p-4 shadow-xs dark:border-slate-800 dark:bg-slate-900 sm:grid-cols-2 lg:grid-cols-5">
         <div>
-          <label className="text-[11px] font-semibold uppercase tracking-wider text-slate-400 mb-1 block">Start Date</label>
+          <label className="text-[11px] font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-400 mb-1 block">Start Date</label>
           <Input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} />
         </div>
         <div>
-          <label className="text-[11px] font-semibold uppercase tracking-wider text-slate-400 mb-1 block">End Date</label>
+          <label className="text-[11px] font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-400 mb-1 block">End Date</label>
           <Input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} />
         </div>
         <div>
-          <label className="text-[11px] font-semibold uppercase tracking-wider text-slate-400 mb-1 block">Status</label>
+          <label className="text-[11px] font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-400 mb-1 block">Status</label>
           <Select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} options={["All status", "Approved / Active", "Pending", "Rejected", "Offline"]} />
         </div>
         <div>
-          <label className="text-[11px] font-semibold uppercase tracking-wider text-slate-400 mb-1 block">Hospital</label>
+          <label className="text-[11px] font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-400 mb-1 block">Hospital</label>
           <Select value={hospitalFilter} onChange={(e) => setHospitalFilter(e.target.value)} options={hospitalOptions} />
         </div>
         <div>
-          <label className="text-[11px] font-semibold uppercase tracking-wider text-slate-400 mb-1 block">Priority</label>
+          <label className="text-[11px] font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-400 mb-1 block">Priority</label>
           <Select value={priorityFilter} onChange={(e) => setPriorityFilter(e.target.value)} options={["All priority", "critical", "high", "medium", "low"]} />
         </div>
       </div>
@@ -405,34 +406,34 @@ export default function ExportCenter() {
       {/* EXPORT PREVIEW & GENERATION PANEL */}
       <div className="grid gap-6 lg:grid-cols-[1fr_360px]">
         {/* Left: Data Preview Summary Table */}
-        <div className="rounded-xl border border-slate-200 bg-white p-5 space-y-4 shadow-xs">
+        <div className="rounded-xl border border-slate-200 bg-white p-5 space-y-4 shadow-xs dark:border-slate-800 dark:bg-slate-900">
           <div className="flex items-center justify-between">
             <div>
-              <h3 className="text-base font-bold text-slate-950">{title}</h3>
-              <p className="text-xs text-slate-500">{data.length} records matching current active filters.</p>
+              <h3 className="text-base font-bold text-slate-950 dark:text-slate-100">{title}</h3>
+              <p className="text-xs text-slate-500 dark:text-slate-400">{data.length} records matching current active filters.</p>
             </div>
-            <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700">
+            <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700 dark:bg-slate-800 dark:text-slate-300">
               {data.length} Rows
             </span>
           </div>
 
           {/* Sample Table Preview */}
-          <div className="max-h-80 overflow-y-auto rounded-lg border border-slate-100 bg-slate-50/50">
+          <div className="max-h-80 overflow-y-auto rounded-lg border border-slate-100 bg-slate-50/50 dark:border-slate-800 dark:bg-slate-950/60">
             <table className="w-full text-left text-xs">
-              <thead className="sticky top-0 bg-slate-100 text-slate-600 font-semibold border-b border-slate-200">
+              <thead className="sticky top-0 bg-slate-100 text-slate-600 font-semibold border-b border-slate-200 dark:bg-slate-800/80 dark:text-slate-300 dark:border-slate-800">
                 <tr>
                   {columns.slice(0, 5).map((col) => (
                     <th key={col.key} className="px-3 py-2">{col.header}</th>
                   ))}
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-100">
+              <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
                 {data.slice(0, 8).map((item, idx) => (
-                  <tr key={idx} className="hover:bg-slate-100/50">
+                  <tr key={idx} className="hover:bg-slate-100/50 dark:hover:bg-slate-800/40">
                     {columns.slice(0, 5).map((col) => {
                       let val = item[col.key];
                       if (col.getValue) val = col.getValue(item);
-                      return <td key={col.key} className="px-3 py-2 text-slate-800">{val !== undefined ? String(val) : "—"}</td>;
+                      return <td key={col.key} className="px-3 py-2 text-slate-800 dark:text-slate-200">{val !== undefined ? String(val) : "—"}</td>;
                     })}
                   </tr>
                 ))}
@@ -442,24 +443,24 @@ export default function ExportCenter() {
         </div>
 
         {/* Right: Export Format Selector & Action */}
-        <div className="rounded-xl border border-slate-200 bg-white p-5 space-y-5 shadow-xs flex flex-col justify-between">
+        <div className="rounded-xl border border-slate-200 bg-white p-5 space-y-5 shadow-xs flex flex-col justify-between dark:border-slate-800 dark:bg-slate-900">
           <div className="space-y-4">
-            <h3 className="text-sm font-bold text-slate-950 uppercase tracking-wider text-slate-400">Export Configuration</h3>
+            <h3 className="text-sm font-bold uppercase tracking-wider text-slate-400 dark:text-slate-400">Export Configuration</h3>
 
             {/* Format Buttons */}
             <div className="space-y-2">
-              <label className="text-xs font-semibold text-slate-700">Target File Format</label>
+              <label className="text-xs font-semibold text-slate-700 dark:text-slate-300">Target File Format</label>
               <div className="grid grid-cols-3 gap-2">
                 <button
                   type="button"
                   onClick={() => setExportFormat("csv")}
                   className={`flex flex-col items-center justify-center p-3 rounded-lg border text-xs font-bold transition ${
                     exportFormat === "csv"
-                      ? "border-blue-600 bg-blue-50 text-blue-700 ring-2 ring-blue-100"
-                      : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
+                      ? "border-blue-600 bg-blue-50 text-blue-700 ring-2 ring-blue-100 dark:border-blue-500 dark:bg-blue-950/50 dark:text-blue-300 dark:ring-blue-900/40"
+                      : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-400 dark:hover:bg-slate-800"
                   }`}
                 >
-                  <FileCode className="h-5 w-5 mb-1 text-blue-600" />
+                  <FileCode className="h-5 w-5 mb-1 text-blue-600 dark:text-blue-400" />
                   <span>CSV</span>
                 </button>
                 <button
@@ -467,11 +468,11 @@ export default function ExportCenter() {
                   onClick={() => setExportFormat("excel")}
                   className={`flex flex-col items-center justify-center p-3 rounded-lg border text-xs font-bold transition ${
                     exportFormat === "excel"
-                      ? "border-emerald-600 bg-emerald-50 text-emerald-700 ring-2 ring-emerald-100"
-                      : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
+                      ? "border-emerald-600 bg-emerald-50 text-emerald-700 ring-2 ring-emerald-100 dark:border-emerald-500 dark:bg-emerald-950/50 dark:text-emerald-300 dark:ring-emerald-900/40"
+                      : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-400 dark:hover:bg-slate-800"
                   }`}
                 >
-                  <FileSpreadsheet className="h-5 w-5 mb-1 text-emerald-600" />
+                  <FileSpreadsheet className="h-5 w-5 mb-1 text-emerald-600 dark:text-emerald-400" />
                   <span>Excel (.xlsx)</span>
                 </button>
                 <button
@@ -479,35 +480,35 @@ export default function ExportCenter() {
                   onClick={() => setExportFormat("pdf")}
                   className={`flex flex-col items-center justify-center p-3 rounded-lg border text-xs font-bold transition ${
                     exportFormat === "pdf"
-                      ? "border-red-600 bg-red-50 text-red-700 ring-2 ring-red-100"
-                      : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
+                      ? "border-red-600 bg-red-50 text-red-700 ring-2 ring-red-100 dark:border-red-500 dark:bg-red-950/50 dark:text-red-300 dark:ring-red-900/40"
+                      : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-400 dark:hover:bg-slate-800"
                   }`}
                 >
-                  <FileText className="h-5 w-5 mb-1 text-red-600" />
+                  <FileText className="h-5 w-5 mb-1 text-red-600 dark:text-red-400" />
                   <span>PDF Report</span>
                 </button>
               </div>
             </div>
 
             {/* File Info */}
-            <div className="rounded-lg border border-slate-100 bg-slate-50 p-3 text-xs space-y-1.5">
-              <div className="flex justify-between text-slate-600">
+            <div className="rounded-lg border border-slate-100 bg-slate-50 p-3 text-xs space-y-1.5 dark:border-slate-800 dark:bg-slate-950/60">
+              <div className="flex justify-between text-slate-600 dark:text-slate-400">
                 <span>Record Count:</span>
-                <span className="font-bold text-slate-900">{data.length}</span>
+                <span className="font-bold text-slate-900 dark:text-slate-100">{data.length}</span>
               </div>
-              <div className="flex justify-between text-slate-600">
+              <div className="flex justify-between text-slate-600 dark:text-slate-400">
                 <span>Est. File Size:</span>
-                <span className="font-bold text-slate-900">{estimatedFileSize}</span>
+                <span className="font-bold text-slate-900 dark:text-slate-100">{estimatedFileSize}</span>
               </div>
-              <div className="flex justify-between text-slate-600">
+              <div className="flex justify-between text-slate-600 dark:text-slate-400">
                 <span>Format:</span>
-                <span className="font-bold uppercase text-slate-900">{exportFormat}</span>
+                <span className="font-bold uppercase text-slate-900 dark:text-slate-100">{exportFormat}</span>
               </div>
             </div>
 
             {successMsg && (
-              <div className="flex items-center gap-2 rounded-md bg-emerald-50 p-3 text-xs font-medium text-emerald-800 border border-emerald-200">
-                <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-600" />
+              <div className="flex items-center gap-2 rounded-md bg-emerald-50 p-3 text-xs font-medium text-emerald-800 border border-emerald-200 dark:border-emerald-900/50 dark:bg-emerald-950/40 dark:text-emerald-300">
+                <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-600 dark:text-emerald-400" />
                 <span>{successMsg}</span>
               </div>
             )}
@@ -534,11 +535,11 @@ export default function ExportCenter() {
       </div>
 
       {/* EXPORT HISTORY SECTION */}
-      <div className="rounded-xl border border-slate-200 bg-white p-5 space-y-4 shadow-xs">
+      <div className="rounded-xl border border-slate-200 bg-white p-5 space-y-4 shadow-xs dark:border-slate-800 dark:bg-slate-900">
         <div className="flex items-center justify-between">
           <div>
-            <h3 className="text-base font-bold text-slate-950">Export History</h3>
-            <p className="text-xs text-slate-500">Recent report downloads generated in this session.</p>
+            <h3 className="text-base font-bold text-slate-950 dark:text-slate-100">Export History</h3>
+            <p className="text-xs text-slate-500 dark:text-slate-400">Recent report downloads generated in this session.</p>
           </div>
           <span className="text-xs text-slate-400">{history.length} exports logged</span>
         </div>
@@ -546,23 +547,23 @@ export default function ExportCenter() {
         {history.length === 0 ? (
           <p className="text-xs text-slate-400 py-6 text-center">No export history recorded yet.</p>
         ) : (
-          <div className="divide-y divide-slate-100">
+          <div className="divide-y divide-slate-100 dark:divide-slate-800">
             {history.map((item) => (
               <div key={item.id} className="flex items-center justify-between py-3 text-xs">
                 <div className="flex items-center gap-3">
-                  <div className="grid h-8 w-8 place-items-center rounded-lg bg-slate-100 text-slate-700 font-bold uppercase text-[10px]">
+                  <div className="grid h-8 w-8 place-items-center rounded-lg bg-slate-100 text-slate-700 font-bold uppercase text-[10px] dark:bg-slate-800 dark:text-slate-300">
                     {item.format}
                   </div>
                   <div>
-                    <p className="font-bold text-slate-900">{item.filename}</p>
-                    <p className="text-slate-500">{item.module} · {item.recordCount} records · {formatDateTime(item.timestamp)}</p>
+                    <p className="font-bold text-slate-900 dark:text-slate-100">{item.filename}</p>
+                    <p className="text-slate-500 dark:text-slate-400">{item.module} · {item.recordCount} records · {formatDateTime(item.timestamp)}</p>
                   </div>
                 </div>
                 <div className="flex items-center gap-2">
                   <Button variant="ghost" size="sm" className="h-8 gap-1 text-xs" onClick={handleExecuteExport}>
                     Download Again <Download className="h-3 w-3" />
                   </Button>
-                  <Button variant="ghost" size="icon" className="h-8 w-8 text-red-500 hover:text-red-700" onClick={() => removeFromHistory(item.id)}>
+                  <Button variant="ghost" size="icon" className="h-8 w-8 text-red-500 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300" onClick={() => removeFromHistory(item.id)}>
                     <Trash2 className="h-4 w-4" />
                   </Button>
                 </div>

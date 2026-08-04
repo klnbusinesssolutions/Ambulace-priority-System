@@ -41,7 +41,7 @@ export default function Drivers() {
         title="Drivers"
         description="Live view of the drivers collection, written by the Android driver app once an account is approved."
       />
-      <div className="grid gap-3 rounded-lg border border-slate-200 bg-white p-4 md:grid-cols-[minmax(220px,1fr)_240px]">
+      <div className="grid gap-3 rounded-lg border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900 md:grid-cols-[minmax(220px,1fr)_240px]">
         <Input placeholder="Search drivers..." value={query} onChange={(event) => setQuery(event.target.value)} />
         <Select value={hospital} onChange={(event) => setHospital(event.target.value)} options={hospitals} />
       </div>
@@ -50,7 +50,7 @@ export default function Drivers() {
         emptyTitle="No drivers found"
         onRowClick={(row) => openDrawer({ type: "driver", item: row })}
         columns={[
-          { key: "name", header: "Driver", render: (row) => <div><p className="font-medium text-slate-950">{row.name}</p><p className="text-xs text-slate-500">{row.id}</p></div> },
+          { key: "name", header: "Driver", render: (row) => <div><p className="font-medium text-slate-950 dark:text-slate-100">{row.name}</p><p className="text-xs text-slate-500 dark:text-slate-400">{row.phone || row.email || "Active Driver"}</p></div> },
           { key: "hospitalName", header: "Hospital" },
           { key: "phone", header: "Phone" },
           { key: "email", header: "Email" },
@@ -61,7 +61,7 @@ export default function Drivers() {
             header: "Last Location",
             render: (row) =>
               row.location ? (
-                <span className="inline-flex items-center gap-1 text-xs text-slate-600">
+                <span className="inline-flex items-center gap-1 text-xs text-slate-600 dark:text-slate-300">
                   <MapPin className="h-3.5 w-3.5 text-slate-400" />
                   {row.location.latitude?.toFixed(3)}, {row.location.longitude?.toFixed(3)}
                 </span>

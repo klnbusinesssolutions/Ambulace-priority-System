@@ -26,7 +26,8 @@ import {
   removeAmbulance,
   assignDriverToAmbulance,
 } from "../services/firestore/pendingAmbulancesService.js";
-import { listenToEmergencies, updateEmergencyStatus } from "../services/firestore/emergenciesService.js";
+import { listenToEmergencies, updateEmergencyStatus, overrideEmergencyStatus } from "../services/firestore/emergenciesService.js";
+import { isEmergencyActive } from "../utils/emergencyLifecycle.js";
 import { listenToLiveLocations } from "../services/firestore/liveLocationsService.js";
 import { listenToNotifications, markNotificationRead, createNotification, syncAndCleanupStaleNotifications } from "../services/firestore/notificationsService.js";
 import { listenToActivityLogs } from "../services/firestore/activityLogService.js";
@@ -58,7 +59,12 @@ import {
   verificationTrend,
 } from "../services/mockData.js";
 
-const STORAGE_KEY = "ambugrid_settings";
+import { listenToLoginHistory } from "../services/firestore/loginHistoryService.js";
+import { updateAdmin } from "../services/firestore/adminsService.js";
+
+function getAdminStorageKey(admin) {
+  return admin?.uid ? `ambugrid_settings_${admin.uid}` : "ambugrid_settings_default";
+}
 
 function getInitialSettings(admin) {
   const defaults = {
@@ -72,16 +78,18 @@ function getInitialSettings(admin) {
     criticalOnly: false,
     dispatchMode: "Balanced",
     timezone: "Asia/Calcutta",
-    language: "English",
     dateFormat: "DD/MM/YYYY",
     timeFormat: "12-hour",
     sessionTimeout: "30 Minutes",
   };
 
   try {
-    const saved = localStorage.getItem(STORAGE_KEY);
+    const key = getAdminStorageKey(admin);
+    const saved = localStorage.getItem(key) || localStorage.getItem("ambugrid_settings");
     if (saved) {
-      return { ...defaults, ...JSON.parse(saved) };
+      const parsed = JSON.parse(saved);
+      delete parsed.language; // Remove legacy language field if present
+      return { ...defaults, ...parsed };
     }
   } catch (e) {
     console.error("Failed to load settings from localStorage:", e);
@@ -135,6 +143,7 @@ export function OpsProvider({ children }) {
   const [activityLogs] = useLiveCollection(listenToActivityLogs, demoActivityLogs);
   const [analytics] = useLiveCollection(listenToAnalytics, demoAnalytics);
   const [pendingPoliceOfficers] = useLiveCollection(listenToPendingPoliceOfficers, demoPendingPoliceOfficers);
+  const [loginHistory] = useLiveCollection(listenToLoginHistory, []);
 
   const [settings, setSettingsState] = useState(() => getInitialSettings(admin));
 
@@ -278,11 +287,19 @@ export function OpsProvider({ children }) {
   };
 
   const emergenciesActions = {
-    updateStatus: async (id, status) => {
-      await updateEmergencyStatus(id, status);
+    updateStatus: async (id, status, record = null) => {
+      await updateEmergencyStatus(id, status, record);
       if (!firebaseReady) {
         setEmergencies((prev) =>
           prev.map((e) => (e.id === id ? { ...e, status, updatedAt: new Date().toISOString() } : e))
+        );
+      }
+    },
+    overrideStatus: async (id, newStatus, reason, oldStatus, record = null) => {
+      await overrideEmergencyStatus(id, newStatus, reason, oldStatus, record);
+      if (!firebaseReady) {
+        setEmergencies((prev) =>
+          prev.map((e) => (e.id === id ? { ...e, status: newStatus, updatedAt: new Date().toISOString() } : e))
         );
       }
     },
@@ -364,9 +381,7 @@ export function OpsProvider({ children }) {
       daysCount: 7,
     });
 
-    const activeEmergencies = (emergencies || []).filter((item) =>
-      ["active", "dispatched", "arrived", "in_progress"].includes(item.status)
-    );
+    const activeEmergencies = (emergencies || []).filter((item) => isEmergencyActive(item.status));
 
     return {
       overviewStats: [
@@ -470,12 +485,19 @@ export function OpsProvider({ children }) {
       notifications,
       analytics,
       pendingPoliceOfficers,
+      loginHistory,
       settings,
       setSettings: (patch) =>
         setSettingsState((current) => {
           const updated = typeof patch === "function" ? patch(current) : { ...current, ...patch };
           try {
-            localStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
+            const key = getAdminStorageKey(admin);
+            localStorage.setItem(key, JSON.stringify(updated));
+            if (firebaseReady && admin?.uid) {
+              updateAdmin(admin.uid, { settings: updated }).catch((err) =>
+                console.error("Failed to sync settings to Firestore:", err)
+              );
+            }
           } catch (e) {
             console.error("Failed to write settings to localStorage:", e);
           }
@@ -503,6 +525,7 @@ export function OpsProvider({ children }) {
     notifications,
     analytics,
     pendingPoliceOfficers,
+    loginHistory,
     settings,
   ]);
 

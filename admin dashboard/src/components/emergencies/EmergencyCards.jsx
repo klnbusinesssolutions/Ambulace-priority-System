@@ -5,14 +5,22 @@ import {
   Clock,
   MapPin,
   User,
-  ShieldCheck,
 } from "lucide-react";
 import { Card, CardContent } from "../ui/Card.jsx";
-import Select from "../ui/Select.jsx";
 import StatusBadge from "../ui/StatusBadge.jsx";
 import { formatTimeAgo } from "../../utils/formatters.js";
-
-const statusOptions = ["active", "dispatched", "arrived", "completed", "resolved"];
+import { useOps } from "../../context/OpsContext.jsx";
+import {
+  EMERGENCY_STATUS_LABELS,
+  EMERGENCY_TIMELINE_STAGES,
+  getEmergencyTimelineStepIndex,
+  normalizeEmergencyStatus,
+} from "../../utils/emergencyLifecycle.js";
+import {
+  resolveAmbulancePlate,
+  resolveDriverName,
+  resolveHospitalName,
+} from "../../utils/entityDisplay.js";
 
 const priorityLabels = {
   critical: "Critical",
@@ -28,19 +36,13 @@ const priorityAccents = {
   low: "border-l-emerald-600 dark:border-l-emerald-500",
 };
 
-const timelineStages = [
-  { key: "active", label: "Reported" },
-  { key: "dispatched", label: "Assigned" },
-  { key: "arrived", label: "En Route" },
-  { key: "completed", label: "Arrived" },
-  { key: "resolved", label: "Completed" },
-];
+export default function EmergencyCards({ rows = [], onCardClick }) {
+  const { ambulances = [], drivers = [], hospitals = [] } = useOps();
 
-export default function EmergencyCards({ rows = [], onStatusChange, onCardClick }) {
   if (!rows.length) {
     return (
       <div className="rounded-xl border border-dashed border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-900 p-12 text-center text-sm text-slate-500 dark:text-slate-400">
-        No emergencies match this active view.
+        No active emergencies currently reporting.
       </div>
     );
   }
@@ -48,19 +50,20 @@ export default function EmergencyCards({ rows = [], onStatusChange, onCardClick 
   return (
     <div className="grid gap-4 lg:grid-cols-2">
       {rows.map((item) => {
+        const normStatus = normalizeEmergencyStatus(item.status);
+        const statusLabel = EMERGENCY_STATUS_LABELS[normStatus] || "Reported";
         const priorityKey = (item.priority || "critical").toLowerCase();
         const accentClass = priorityAccents[priorityKey] || priorityAccents.medium;
         const incidentType = item.incidentType || "Emergency Incident";
         const patientName = item.patientName || item.patient || "Anonymous Patient";
-        const hospName = item.hospitalName || item.hospitalId || "Assigned Hospital";
-        const ambName = item.ambulanceId || "Unit Pending";
-        const drvName = item.driverName || "Driver Assigned";
+        const hospName = resolveHospitalName(item.hospitalName || item.hospitalId, hospitals);
+        const ambName = resolveAmbulancePlate(item.ambulanceId, ambulances);
+        const drvName = resolveDriverName(item.driverName || item.driverId, drivers);
         const timeAgo = formatTimeAgo(item.createdAt || item.startTime || item.timestamp);
         const updatedAgo = formatTimeAgo(item.updatedAt || item.createdAt || item.timestamp);
 
-        // Calculate timeline step index
-        const currentStageIdx = timelineStages.findIndex((s) => s.key === item.status);
-        const activeIdx = currentStageIdx >= 0 ? currentStageIdx : 1;
+        // Calculate canonical timeline step index (0 to 4)
+        const activeIdx = getEmergencyTimelineStepIndex(item.status);
 
         return (
           <Card
@@ -69,7 +72,7 @@ export default function EmergencyCards({ rows = [], onStatusChange, onCardClick 
             onClick={(e) => onCardClick?.(item, e)}
           >
             <CardContent className="space-y-4 p-5">
-              {/* 1. Header: Incident Type + Priority Badge + Status Select */}
+              {/* 1. Header: Incident Type + Priority Badge + Read-Only Status Badge */}
               <div className="flex items-start justify-between gap-3">
                 <div>
                   <div className="flex flex-wrap items-center gap-2">
@@ -82,20 +85,15 @@ export default function EmergencyCards({ rows = [], onStatusChange, onCardClick 
                     Reported {timeAgo} · Updated {updatedAgo}
                   </p>
                 </div>
-                <div onClick={(e) => e.stopPropagation()} className="shrink-0">
-                  <Select
-                    className="h-8 w-36 text-xs"
-                    value={item.status || "dispatched"}
-                    onChange={(event) => onStatusChange(item.id, event.target.value)}
-                    options={statusOptions}
-                  />
+                <div className="shrink-0">
+                  <StatusBadge status={statusLabel} />
                 </div>
               </div>
 
               {/* 2. Compact Operational Stage Progress Timeline */}
               <div className="rounded-lg border border-slate-100 dark:border-slate-800/80 bg-slate-50/70 dark:bg-slate-800/40 p-2.5">
                 <div className="flex items-center justify-between gap-1">
-                  {timelineStages.map((stage, idx) => {
+                  {EMERGENCY_TIMELINE_STAGES.map((stage, idx) => {
                     const isPassed = idx <= activeIdx;
                     const isCurrent = idx === activeIdx;
 
@@ -120,7 +118,7 @@ export default function EmergencyCards({ rows = [], onStatusChange, onCardClick 
                           >
                             {isPassed ? <CheckCircle2 className="h-3 w-3" /> : idx + 1}
                           </div>
-                          {idx < timelineStages.length - 1 && (
+                          {idx < EMERGENCY_TIMELINE_STAGES.length - 1 && (
                             <div
                               className={`h-0.5 flex-1 ${
                                 idx < activeIdx ? "bg-blue-600 dark:bg-blue-500" : "bg-slate-200 dark:bg-slate-700"

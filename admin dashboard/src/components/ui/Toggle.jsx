@@ -28,17 +28,17 @@ export default function Toggle({
     <div
       onClick={handleToggle}
       className={cn(
-        "flex items-center justify-between gap-4 rounded-lg border border-slate-200 bg-white p-3.5 shadow-xs transition-all hover:border-slate-300 dark:border-slate-800 dark:bg-slate-900 dark:hover:border-slate-700 cursor-pointer select-none",
+        "flex items-center justify-between gap-4 rounded-lg border border-slate-200 bg-white p-3.5 shadow-xs transition-all hover:border-slate-300 dark:border-slate-700 dark:bg-slate-800/90 dark:hover:border-slate-600 cursor-pointer select-none",
         disabled && "opacity-50 cursor-not-allowed",
         className,
       )}
     >
       <div className="grid gap-0.5">
-        <span id={toggleId ? `${toggleId}-label` : undefined} className="text-sm font-medium text-slate-950 dark:text-slate-100">
+        <span id={toggleId ? `${toggleId}-label` : undefined} className="text-sm font-bold text-slate-950 dark:text-slate-100">
           {label}
         </span>
         {description && (
-          <span className="text-xs text-slate-500 dark:text-slate-400">{description}</span>
+          <span className="text-xs text-slate-500 dark:text-slate-300">{description}</span>
         )}
       </div>
       <button
@@ -55,7 +55,7 @@ export default function Toggle({
         }}
         className={cn(
           "focus-ring relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors duration-200 ease-in-out focus:outline-none",
-          checked ? "bg-slate-950 dark:bg-emerald-600" : "bg-slate-200 dark:bg-slate-700",
+          checked ? "bg-slate-950 dark:bg-blue-600" : "bg-slate-200 dark:bg-slate-700",
         )}
       >
         <span

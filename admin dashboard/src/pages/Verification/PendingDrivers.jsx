@@ -66,7 +66,7 @@ export default function PendingDrivers() {
         title="Pending Drivers"
         description="Verification queue from the pending_drivers collection, written by hospital dashboards."
       />
-      <div className="grid gap-3 rounded-lg border border-slate-200 bg-white p-4 md:grid-cols-[minmax(220px,1fr)_220px]">
+      <div className="grid gap-3 rounded-lg border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900 md:grid-cols-[minmax(220px,1fr)_220px]">
         <Input
           placeholder="Search by name, phone, licence..."
           value={query}
@@ -84,7 +84,7 @@ export default function PendingDrivers() {
         rows={rows}
         emptyTitle="No pending driver requests"
         columns={[
-          { key: "fullName", header: "Driver", render: (row) => <div><p className="font-medium text-slate-950">{row.fullName || row.driverName}</p><p className="text-xs text-slate-500">{row.id}</p></div> },
+          { key: "fullName", header: "Driver", render: (row) => <div><p className="font-medium text-slate-950 dark:text-slate-100">{row.fullName || row.driverName}</p><p className="text-xs text-slate-500 dark:text-slate-400">{row.phone || row.email || "Pending Verification"}</p></div> },
           { key: "hospitalId", header: "Hospital" },
           { key: "phone", header: "Phone" },
           { key: "licenseNumber", header: "Licence No." },
