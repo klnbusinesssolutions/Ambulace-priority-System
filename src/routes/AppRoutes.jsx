@@ -1,0 +1,59 @@
+import { createBrowserRouter, Navigate } from "react-router-dom";
+import AdminLayout from "../layouts/AdminLayout.jsx";
+import ActivityLogs from "../pages/ActivityLogs/ActivityLogs.jsx";
+import Ambulances from "../pages/Ambulances/Ambulances.jsx";
+import Analytics from "../pages/Analytics/Analytics.jsx";
+import Dashboard from "../pages/Dashboard/Dashboard.jsx";
+import Drivers from "../pages/Drivers/Drivers.jsx";
+import Emergencies from "../pages/Emergencies/Emergencies.jsx";
+import Hospitals from "../pages/Hospitals/Hospitals.jsx";
+import LiveTracking from "../pages/LiveTracking/LiveTracking.jsx";
+import Settings from "../pages/Settings/Settings.jsx";
+import Notifications from "../pages/Notifications/Notifications.jsx";
+import ExportCenter from "../pages/ExportCenter/ExportCenter.jsx";
+import PendingAmbulances from "../pages/Verification/PendingAmbulances.jsx";
+import PendingDrivers from "../pages/Verification/PendingDrivers.jsx";
+import PendingPoliceOfficers from "../pages/Verification/PendingPoliceOfficers.jsx";
+import RejectedRequests from "../pages/Verification/RejectedRequests.jsx";
+import Login from "../pages/Login.jsx";
+import ProtectedRoute from "./ProtectedRoute.jsx";
+
+export const router = createBrowserRouter([
+  {
+    path: "/",
+    element: <Navigate to="/login" replace />,
+  },
+  {
+    path: "/login",
+    element: <Login />,
+  },
+  {
+    element: <ProtectedRoute />,
+    children: [
+      {
+        path: "/admin",
+        element: <AdminLayout />,
+        children: [
+          { index: true, element: <Navigate to="/admin/dashboard" replace /> },
+          { path: "dashboard", element: <Dashboard /> },
+          { path: "verification", element: <Navigate to="/admin/verification/pending-drivers" replace /> },
+          { path: "verification/pending-drivers", element: <PendingDrivers /> },
+          { path: "verification/pending-ambulances", element: <PendingAmbulances /> },
+          { path: "verification/pending-police-officers", element: <PendingPoliceOfficers /> },
+          { path: "verification/rejected-requests", element: <RejectedRequests /> },
+          { path: "hospitals", element: <Hospitals /> },
+          { path: "drivers", element: <Drivers /> },
+          { path: "ambulances", element: <Ambulances /> },
+          { path: "live-tracking", element: <LiveTracking /> },
+          { path: "emergencies", element: <Emergencies /> },
+          { path: "analytics", element: <Analytics /> },
+          { path: "activity-logs", element: <ActivityLogs /> },
+          { path: "notifications", element: <Notifications /> },
+          { path: "export-center", element: <ExportCenter /> },
+          { path: "settings", element: <Settings /> },
+          { path: "*", element: <Navigate to="/admin/dashboard" replace /> },
+        ],
+      },
+    ],
+  },
+]);
